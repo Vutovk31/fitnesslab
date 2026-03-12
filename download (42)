@@ -1,0 +1,6 @@
+{
+  "name": "Fitness Platform",
+  "short_name": "Fitness",
+  "start_url": "/",
+  "display": "standalone"
+}

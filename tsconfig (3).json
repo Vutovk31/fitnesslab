@@ -1,0 +1,27 @@
+# Database Schema
+
+## Основные таблицы
+- users
+- profiles
+- programs
+- program_weeks
+- workouts
+- workout_exercises
+- exercises
+- exercise_media
+- user_workout_logs
+- user_progress
+- user_measurements
+- nutrition_plans
+- user_nutrition_targets
+- messages
+- subscriptions
+
+## Связи
+- users -> profiles = 1:1
+- programs -> program_weeks = 1:N
+- program_weeks -> workouts = 1:N
+- workouts -> workout_exercises = 1:N
+- users -> user_workout_logs = 1:N
+- users -> user_progress = 1:N
+- users -> user_measurements = 1:N

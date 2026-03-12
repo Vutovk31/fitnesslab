@@ -1,0 +1,80 @@
+# Fitness Platform
+
+Платформа для тренировочных программ с лендингом, личным кабинетом, отслеживанием прогресса и расчётом КБЖУ.
+
+## Возможности
+- лендинг с презентацией программы
+- регистрация и авторизация
+- личный кабинет пользователя
+- тренировочные планы по неделям
+- карточки упражнений
+- календарь тренировок
+- отслеживание прогресса
+- расчёт КБЖУ
+- хранение профиля и фото
+
+## Стек
+- Frontend: Next.js / React / TypeScript
+- Backend: NestJS / Node.js
+- Database: PostgreSQL
+- ORM: Prisma
+- Auth: JWT
+- Storage: local/S3-compatible
+- Deployment: Vercel + Render / VPS / Docker
+
+## Структура проекта
+```text
+fitness-platform/
+├── docs/
+├── assets/
+├── frontend/
+├── backend/
+├── database/
+├── scripts/
+├── .github/
+├── README.md
+├── .env.example
+├── docker-compose.yml
+└── LICENSE
+```
+
+## Локальный запуск
+
+### 1. Клонирование
+```bash
+git clone <your-repo-url>
+cd fitness-platform
+```
+
+### 2. Переменные окружения
+```bash
+cp .env.example .env
+```
+
+### 3. Запуск базы данных
+```bash
+docker compose up -d postgres
+```
+
+### 4. Запуск frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 5. Запуск backend
+```bash
+cd backend
+npm install
+npm run start:dev
+```
+
+## Roadmap
+- MVP: лендинг + моковый кабинет + формы
+- v1: backend + auth + база данных
+- v2: прогресс, замеры, сообщения
+- v3: admin-panel, уведомления, mobile version
+
+## Примечание
+Текущий репозиторий — стартовый инженерный каркас для реальной разработки и передачи команде.
