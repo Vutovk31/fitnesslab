@@ -1,0 +1,14 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createPreview,makeForm} from '../preview/diary-preview.mjs';
+const date='2026-01-01',zone='UTC';
+const setup=()=>{let n=0;return createPreview({date,timezone:zone,seed:false,clock:()=>date+'T10:00:00.000Z',idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`});};
+const f=(o={})=>({...makeForm(date,zone),name:'Каша',amount:'150',kcal:'120',...o});
+test('only planned rows in inclusive selected dates',()=>{const a=setup();a.apply(f(),'confirm');a.apply(f(),'save-draft');a.apply(f(),'plan');a.apply(f({local_date:'2026-01-02',amount:'100'}),'plan');a.apply(f({local_date:'2026-01-03'}),'plan');const r=a.shoppingList(date,2);assert.equal(r.end,'2026-01-02');assert.equal(r.entryCount,2);assert.equal(r.items[0].amount,250);});
+test('unit and preparation and nutrient/source variants stay separate',()=>{const a=setup();for(const o of [{},{unit:'ml',basis_unit:'ml'},{preparation:'raw'},{preparation:'cooked'},{kcal:'121'},{source_reference:'other'}])a.apply(f(o),'plan');assert.equal(a.shoppingList(date,1).items.length,6);});
+test('unknown nutrition and fractional portions preserved',()=>{const a=setup();a.apply(f({amount:'0,5',unit:'piece',basis_unit:'piece',basis_amount:'1',kcal:''}),'plan');a.apply(f({amount:'1,25',unit:'piece',basis_unit:'piece',basis_amount:'1',kcal:''}),'plan');const r=a.shoppingList(date,1);assert.equal(r.items[0].amount,1.75);assert.equal(r.items[0].kcal,'');assert.equal(r.items[0].unit,'piece');});
+test('read-only detached output; no price or stock fields',()=>{const a=setup();a.apply(f(),'plan');const before=a.exportBackup(),r=a.shoppingList(date,1);for(const k of ['price','stock','pack_size'])assert.equal(Object.hasOwn(r.items[0],k),false);r.items[0].amount=999;assert.equal(a.exportBackup(),before);assert.equal(a.shoppingList(date,1).items[0].amount,150);});
+test('empty and removed plans produce empty list',()=>{const a=setup(),e=a.apply(f(),'plan');a.remove(e.id,e.revision);assert.deepEqual(a.shoppingList(date,1).items,[]);});
+test('calendar range crosses month and leap day in UTC',()=>{const a=setup();assert.equal(a.shoppingList('2028-02-28',3).end,'2028-03-01');assert.equal(a.shoppingList('2026-12-30',3).end,'2027-01-01');});
+test('reject invalid date, duration and calendar overflow',()=>{const a=setup();for(const d of [0,8,1.5,'2',NaN])assert.throws(()=>a.shoppingList(date,d),RangeError);assert.throws(()=>a.shoppingList('2026-02-30',1),RangeError);assert.throws(()=>a.shoppingList('9999-12-31',2),RangeError);});
+test('aggregate quantity overflow rejected without changing diary',()=>{const a=setup(),large='1'+'0'.repeat(308);a.apply(f({amount:large,basis_amount:large,kcal:'0'}),'plan');a.apply(f({amount:large,basis_amount:large,kcal:'0'}),'plan');const before=a.exportBackup();assert.throws(()=>a.shoppingList(date,1),RangeError);assert.equal(a.exportBackup(),before);});

@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "015-P1-03-PREP-MEAL",
-  "status": "MEAL_CONSTRUCTOR_TARGETED_PASS_STORAGE_GATE_OPEN",
+  "cycle": "016-P1-03-PREP-SHOPPING",
+  "status": "SHOPPING_LIST_TARGETED_PASS_STORAGE_GATE_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,41 +42,41 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "P1-03-PREP-SHOPPING",
-    "title": "Derive a shopping list from planned diary meals over a selected date range",
-    "scope": "Review actual browser acceptance receipt first if available. Otherwise derive a read-only list from existing planned rows for a selected 1–7 day interval, with compatible units, no invented prices or stock; manual export and explicit labels. Do not create second store. Preserve previous preview features.",
+    "id": "P1-02-PREP-TRAINING",
+    "title": "Local workout session draft and explicit summary",
+    "scope": "Review valid actual browser acceptance receipt first if available. Otherwise implement a temporary, clearly labeled training session draft with exercises, sets, repetitions, load and duration, validated inputs and manual export; no guessed calorie expenditure, no persistent store or automatic diary modifications. Preserve nutrition, backup and shopping features; declare training draft outside current backup format.",
     "acceptance": [
-      "Only planned entries in selected dates",
-      "No aggregation across incompatible units or raw/cooked variants",
-      "No assumed prices, pack sizes or stock",
-      "Read-only calculation and explicit export",
+      "Explicit user-entered exercise and set metrics",
+      "Validated nonnegative or positive metrics as appropriate, unknown not zero",
+      "No automatic calorie credit or upload",
+      "Manual summary export",
       "Regression tests and honest DOM-only evidence"
     ],
-    "rollback": "Revert scoped commit."
+    "rollback": "Revert scoped engineering commit."
   },
   "gates": {
     "local_workspace_reconciliation": "UNKNOWN; before replacing legacy files",
     "native_ios": "requires Xcode/signing and physical device acceptance",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "PREVIEW_TARGETED_PASS_87; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
+    "runtime_tests": "PREVIEW_TARGETED_PASS_95; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
   },
-  "parent_head": "037f2b5fa116d7c4b943663e3ed73f55d3fa246a",
+  "parent_head": "d80c506f7c3cbc47efa453a0f7f5b9de0632ff79",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE015.md",
-    "previous": "docs/fit-control/evidence/CYCLE014.md",
-    "test_count": 87,
-    "pass": 87,
+    "path": "docs/fit-control/evidence/CYCLE016.md",
+    "previous": "docs/fit-control/evidence/CYCLE015.md",
+    "test_count": 95,
+    "pass": 95,
     "fail": 0,
-    "scope": "80 prior + 7 meal tests against restored compiled domain modules; first-script minimal DOM smoke; no actual browser",
+    "scope": "87 prior + 8 shopping tests against restored compiled domain modules; first-script minimal DOM smoke; no actual browser",
     "tested_blobs": {
       "preview/build.py": "f1ac01e6b0828266b03a433b1a8904c286accf86",
       "preview/daily-report.mjs": "ba816538be242ad46a5bb7732a81e6c9bc63d56f",
-      "preview/diary-preview.mjs": "6739061b4a6e245e787ebb80a689f05a00c59b33",
-      "preview/index.html": "4630f207bc0d3a9d2711f4b79b0a3760b294b17f",
+      "preview/diary-preview.mjs": "7486226249d74934002cfdb43a33296b338b9c83",
+      "preview/index.html": "5b06bea7c52ee9f6104fd8982470fa08e9c1d23e",
       "tests/daily-report.test.mjs": "66b5e5f0c6dc994f12b3971133a33422e0dba855",
       "tests/diary-preview.test.mjs": "b765e619f6c782784bcc2a0a024eacf55b9beb0c",
-      "tests/dom-smoke.mjs": "73f3ab5817f50f417ebbd51718cfa10f4ca33ff0",
+      "tests/dom-smoke.mjs": "6b47b01577ae4a882649f197696ce9a97cb89eab",
       "tests/preview-goals.test.mjs": "e17fa3b67a0e4344abd161b4a638b8994a7511a1",
       "preview/voice.mjs": "d4cb6a0b9bef0dad373804bcc831599c2ff9fd80",
       "tests/voice.test.mjs": "0042dfeab4f105ed2f7adb058fb4bd82a308e777",
@@ -84,10 +84,11 @@
       "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490",
       "tests/backup.test.mjs": "de22b5a09ff9a56aa128c7a5f4597fa71675707a",
       "tests/catalog.test.mjs": "fc6ffc6cd0318252cf99ba31e107f573b9c66517",
-      "tests/meal.test.mjs": "7050f0f95c5bc20636c94336fed62a5a94f27d35"
+      "tests/meal.test.mjs": "7050f0f95c5bc20636c94336fed62a5a94f27d35",
+      "tests/shopping.test.mjs": "fb77a553fb8549e74a35b50359ebc05efe401ede"
     },
-    "html_sha256": "0342cab6a498217f638c208e70df826307920dc20dcb380e124c2ddea2ff25e6",
-    "html_bytes": 242647,
+    "html_sha256": "cc162ab1b7aaa97479f6056c9c069cf5fbb85dc688f9cb41a043317d2dfefd6a",
+    "html_bytes": 250373,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
