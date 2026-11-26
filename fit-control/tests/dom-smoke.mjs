@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+// Minimal DOM adapter; not a browser or accessibility/layout acceptance.
+class Element {
+  constructor(tag='div'){this.tag=tag;this.children=[];this.handlers={};this.dataset={};this.attrs={};this.value='';this.hidden=false;this.textContent='';}
+  append(...children){this.children.push(...children);} replaceChildren(){this.children=[];} setAttribute(k,v){this.attrs[k]=v;} addEventListener(k,fn){this.handlers[k]=fn;} focus(){} select(){} fire(k,event={}){this.handlers[k]?.({preventDefault(){},...event});}
+}
+const ids='day editor mode-label energy remaining counts macros groups editor-heading save-edit save-confirm save-plan save-draft error portion add cancel prepare-report copy-report report report-status'.split(' '), nodes=Object.fromEntries(ids.map(k=>[k,new Element()]));
+const fields=Object.fromEntries('name meal_type preparation amount unit basis_amount basis_unit kcal protein_g fat_g carbs_g source_kind source_reference'.split(' ').map(k=>[k,new Element('input')]));
+nodes.editor.elements={namedItem:k=>fields[k]??null};const modes=['confirmed','planned','forecast'].map(mode=>{const b=new Element('button');b.dataset.mode=mode;return b;});
+globalThis.document={getElementById:k=>nodes[k],createElement:t=>new Element(t),querySelectorAll:()=>modes};globalThis.FormData=class{*[Symbol.iterator](){for(const [k,v] of Object.entries(fields))yield [k,v.value];}};globalThis.confirm=()=>true;
+await import('../standalone-script.mjs');
+const num=e=>e.textContent.replace(/[\s\u00a0]/g,'');
+assert.equal(num(nodes.energy),'378');modes[1].fire('click');assert.equal(num(nodes.energy),'330');modes[2].fire('click');assert.equal(num(nodes.energy),'708');
+nodes.add.fire('click');Object.assign(fields.name,{value:'Новый тест'});fields.amount.value='100';fields.kcal.value='100';nodes.editor.fire('input');assert.match(nodes.portion.textContent,/100 ккал/);nodes.editor.fire('submit',{submitter:{value:'confirm'}});assert.equal(num(nodes.energy),'808');
+function all(e){return [e,...e.children.flatMap(all)];}let line=all(nodes.groups).find(e=>e.children.some(x=>x.children?.some(y=>y.textContent==='Новый тест'))&&e.children.some(x=>x.children?.some(y=>y.textContent==='Изменить')));assert.ok(line);all(line).find(e=>e.textContent==='Изменить').fire('click');assert.equal(fields.name.value,'Новый тест');fields.amount.value='200';nodes.editor.fire('submit',{submitter:{value:'edit'}});assert.equal(num(nodes.energy),'908');line=all(nodes.groups).find(e=>e.children.some(x=>x.children?.some(y=>y.textContent==='Новый тест'))&&e.children.some(x=>x.children?.some(y=>y.textContent==='Удалить')));all(line).find(e=>e.textContent==='Удалить').fire('click');assert.equal(num(nodes.energy),'708');
+nodes['prepare-report'].fire('click');assert.match(nodes.report.value,/synthetic_preview/);assert.equal(nodes.report.hidden,false);assert.equal(nodes['copy-report'].hidden,false);
+nodes.day.value='2026-01-02';nodes.day.fire('change');assert.equal(num(nodes.energy),'0');assert.equal(nodes.report.value,'');assert.equal(nodes.report.hidden,true);console.log('PARTIAL_DOM_ONLY: startup, mode switching, add, edit, delete, date change PASS');

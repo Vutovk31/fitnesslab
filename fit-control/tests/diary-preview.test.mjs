@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createPreview,makeForm,toForm} from '../preview/diary-preview.mjs';
+const date='2026-01-01', timezone='Europe/Moscow', now='2026-01-01T10:00:00.000Z';
+const setup=(seed=false)=>{let n=0;return createPreview({date,timezone,clock:()=>now,idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`,seed});};
+const f=(o={})=>({...makeForm(date,timezone),name:'Пример',amount:'150',kcal:'120',protein_g:'10',fat_g:'4',carbs_g:'8',...o});
+test('seed uses actual and plan independently',()=>{const a=setup(true).view(date);assert.equal(a.confirmedCount,2);assert.equal(a.plannedCount,1);assert.equal(a.cards.kcal.confirmed.total,378);assert.equal(a.cards.kcal.forecast.total,708);});
+test('create preview and actual',()=>{const a=setup();assert.equal(a.command(f(),'confirm').preview.kcal,180);assert.equal(a.view(date).hasEntries,false);a.apply(f(),'confirm');assert.equal(a.view(date).cards.kcal.confirmed.total,180);});
+test('plan and explicit confirmation',()=>{const a=setup(), e=a.apply(f(),'plan');assert.equal(a.view(date).cards.kcal.confirmed.total,0);a.apply(toForm(e),'confirm',e.id,e.revision);assert.equal(a.view(date).cards.kcal.confirmed.total,180);assert.equal(a.view(date).cards.kcal.planned.total,0);});
+test('edit revision, preserve source, reject stale action',()=>{const a=setup(),e=a.apply(f({source_kind:'catalog',source_reference:'sample',source_retrieved_at:now,source_license:'sample'}),'confirm');const updated=a.apply({...toForm(e),amount:'200'},'edit',e.id,e.revision);assert.equal(updated.revision,2);assert.equal(updated.food.source.reference,'sample');assert.equal(updated.food.source.retrieved_at,now);assert.equal(updated.food.source.license,'sample');assert.equal(a.view(date).cards.kcal.confirmed.total,240);assert.throws(()=>a.remove(e.id,e.revision));});
+test('delete and filter date',()=>{const a=setup(),e=a.apply(f(),'confirm');assert.equal(a.view('2026-01-02').hasEntries,false);a.remove(e.id,e.revision);assert.equal(a.view(date).hasEntries,false);assert.throws(()=>a.get(e.id));});
+test('unknown not zero, draft excluded',()=>{const a=setup();a.apply(f({kcal:''}),'confirm');a.apply(f({amount:''}),'save-draft');const v=a.view(date);assert.equal(v.cards.kcal.confirmed.total,null);assert.equal(v.draftCount,1);});
+test('invalid input does not change temporary rows',()=>{const a=setup();assert.throws(()=>a.apply(f({amount:'-2'}),'confirm'));assert.equal(a.view(date).hasEntries,false);});
+test('fresh instance is not persistent',()=>{const a=setup();a.apply(f(),'confirm');assert.equal(setup().view(date).hasEntries,false);});
+test('get returns a copy',()=>{const a=setup(),e=a.apply(f(),'confirm');a.get(e.id).food.kcal=999;assert.equal(a.view(date).cards.kcal.confirmed.total,180);});

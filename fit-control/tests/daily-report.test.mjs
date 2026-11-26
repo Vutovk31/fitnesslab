@@ -1,0 +1,14 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createPreview,makeForm} from '../preview/diary-preview.mjs';
+import {dailyReport,reportText} from '../preview/daily-report.mjs';
+const date='2026-01-01',timezone='Europe/Moscow',now='2026-01-01T10:00:00.000Z';
+const setup=()=>{let n=0;return createPreview({date,timezone,clock:()=>now,idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`,seed:false});};
+const f=(o={})=>({...makeForm(date,timezone),name:'Synthetic food',amount:'100',kcal:'120',protein_g:'10',fat_g:'4',carbs_g:'8',...o});
+test('selected date, explicit synthetic mode and counts',()=>{const a=setup();a.apply(f(),'confirm');a.apply(f({local_date:'2026-01-02'}),'confirm');const r=dailyReport(a.view(date));assert.equal(r.mode,'synthetic_preview');assert.equal(r.date,date);assert.equal(r.confirmed_count,1);assert.equal(r.cards.kcal.confirmed.total,120);});
+test('plan separated and draft excluded',()=>{const a=setup();a.apply(f(),'confirm');a.apply(f(),'plan');a.apply(f({amount:''}),'save-draft');const r=dailyReport(a.view(date));assert.equal(r.cards.kcal.forecast.total,240);assert.equal(r.cards.kcal.planned.total,120);assert.equal(r.draft_count_excluded,1);assert.equal(r.meals.flatMap(g=>g.entries).length,2);});
+test('null preserved and known subtotal present',()=>{const a=setup();a.apply(f({kcal:''}),'confirm');a.apply(f(),'confirm');const r=dailyReport(a.view(date));assert.deepEqual(r.cards.kcal.confirmed,{known:120,missing:1,total:null});assert.equal(r.cards.kcal.remaining_confirmed,null);});
+test('no identifiers, timezone or source references exported',()=>{const a=setup();a.apply(f({source_kind:'catalog',source_reference:'private-reference',source_license:'private-license'}),'confirm');const s=reportText(a.view(date));for(const x of ['00000000-0000','Europe/Moscow','private-reference','private-license','created_at','revision'])assert.ok(!s.includes(x));assert.ok(s.includes('catalog'));});
+test('report is a detached copy',()=>{const a=setup();a.apply(f(),'confirm');const v=a.view(date),r=dailyReport(v);r.cards.kcal.confirmed.total=999;r.meals[0].entries[0].nutrition.kcal=999;assert.equal(v.cards.kcal.confirmed.total,120);assert.equal(v.groups[0].rows[0].nutrition.kcal,120);});
+test('text marks synthetic and uses JSON payload, not HTML',()=>{const a=setup();a.apply(f({name:'<script>test</script>\nexample'}),'confirm');const t=reportText(a.view(date));assert.match(t,/демонстрационный отчёт/);const r=JSON.parse(t.slice(t.indexOf('{')));assert.equal(r.meals[0].entries[0].name,'<script>test</script>\nexample');});
+test('empty day means zero recorded entries',()=>{const r=dailyReport(setup().view(date));assert.equal(r.confirmed_count,0);assert.equal(r.meals.flatMap(g=>g.entries).length,0);});
