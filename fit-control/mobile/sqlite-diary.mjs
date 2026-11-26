@@ -1,6 +1,7 @@
 import {validateEntry, DiaryConflict} from '../dist/storage.js';
 import {dayBalance} from '../dist/nutrition.js';
 import {matchNutrition,applyNutritionMatch} from './nutrition-matcher.mjs';
+import {CATALOG_TABLE,CATALOG_INDEX,buildCatalogProjection,catalogProjection} from './catalog-projection.mjs';
 
 // Driver owns an exclusive transaction until callback settles, commits only on
 // success, rolls back on failure, serializes callbacks on a connection, and
@@ -48,6 +49,7 @@ async function verifySchema(tx,version){
   const expected=[{type:'table',name:'fc_entries',sql:SCHEMA},{type:'index',name:'fc_entries_date',sql:INDEX}];
   if(version>=2)expected.push({type:'table',name:'fc_goals',sql:GOALS});
   if(version>=3)expected.push({type:'table',name:'fc_recovery',sql:RECOVERY});
+  if(version>=4)expected.unshift({type:'index',name:'fc_catalog_lookup',sql:CATALOG_INDEX},{type:'table',name:'fc_catalog_projection',sql:CATALOG_TABLE});
   check(objects.length===expected.length&&expected.every((e,i)=>Object.keys(e).every(k=>objects[i][k]===e[k])),'Unexpected schema objects');
 }
 function assertChange(result) { if(result?.changes!==1) throw new DiaryConflict('Unexpected write count'); }
@@ -81,7 +83,21 @@ export function inspectBackup(text){
   return {version:JSON.parse(text).schema_version,entries:entries.length,deleted:entries.filter(e=>e.status==='deleted').length,hasGoals:goals.revision>0};
 }
 const INSERT='INSERT INTO fc_entries(id,revision,local_date,payload) VALUES(?,?,?,?)';
-async function insert(tx,e){assertChange(await tx.run(INSERT,[e.id,e.revision,e.local_date,JSON.stringify(e)]));}
+const PROJECTION_SELECT='SELECT id,revision,name_key,unit,preparation,status FROM fc_catalog_projection WHERE id=?';
+const PROJECTION_FIELDS=['id','revision','name_key','unit','preparation','status'];
+async function verifyProjectionRow(tx,e){
+  const row=await tx.get(PROJECTION_SELECT,[e.id]),expected=catalogProjection(e);
+  check(row&&PROJECTION_FIELDS.every((k,i)=>row[k]===expected[i]),'Catalog projection mismatch');
+}
+async function insert(tx,e){
+  assertChange(await tx.run(INSERT,[e.id,e.revision,e.local_date,JSON.stringify(e)]));
+  assertChange(await tx.run('INSERT INTO fc_catalog_projection(id,revision,name_key,unit,preparation,status) VALUES(?,?,?,?,?,?)',catalogProjection(e)));
+}
+async function verifyProjectionCoverage(tx){
+  const missing=await tx.get('SELECT e.id FROM fc_entries e LEFT JOIN fc_catalog_projection p ON p.id=e.id WHERE p.id IS NULL OR p.revision<>e.revision LIMIT 1',[]);
+  const orphan=await tx.get('SELECT p.id FROM fc_catalog_projection p LEFT JOIN fc_entries e ON e.id=p.id WHERE e.id IS NULL LIMIT 1',[]);
+  check(!missing&&!orphan,'Catalog projection coverage mismatch');
+}
 export class SQLiteDiary {
   #driver; #closed=false; #closing;
   constructor(driver, token) { if(token!==openToken) throw new TypeError('Use SQLiteDiary.open');this.#driver=driver; }
@@ -93,12 +109,13 @@ export class SQLiteDiary {
         const tables=await tx.all("SELECT name FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",[]);
         check(tables.length===0,'Unrecognized database; migration refused');
         await tx.run(SCHEMA,[]);await tx.run(INDEX,[]);
-      } else check(v===1||v===2||v===3,'Unsupported schema version');
+      } else check(v===1||v===2||v===3||v===4,'Unsupported schema version');
       if(v<2){
         await verifySchema(tx,1);await tx.run(GOALS,[]);await tx.run('PRAGMA user_version = 2',[]);
       }
       if(v<3){await verifySchema(tx,2);await tx.run(RECOVERY,[]);await tx.run('PRAGMA user_version = 3',[]);}
-      await verifySchema(tx,3);recoveryRow(await tx.get(RECOVERY_SELECT,[]));
+      if(v<4){await verifySchema(tx,3);await buildCatalogProjection(tx);await tx.run('PRAGMA user_version = 4',[]);}
+      await verifySchema(tx,4);await verifyProjectionCoverage(tx);recoveryRow(await tx.get(RECOVERY_SELECT,[]));
       readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
       await tx.all(SELECT+' LIMIT 0',[]);
     });
@@ -146,8 +163,11 @@ export class SQLiteDiary {
   async #change(id,expected,transform,kind,sequence){return this.#write(kind,sequence,async tx=>{
     const row=await tx.get(SELECT+' WHERE id=?',[id]);const old=row?decode(row):null;
     if(!old||old.revision!==expected||old.status==='deleted')throw new DiaryConflict('Revision conflict or deleted entry');
+    await verifyProjectionRow(tx,old);
     const e=transform(old);validateEntry(e);
-    assertChange(await tx.run('UPDATE fc_entries SET revision=?,local_date=?,payload=? WHERE id=? AND revision=?',[e.revision,e.local_date,JSON.stringify(e),id,expected]));return e;
+    assertChange(await tx.run('UPDATE fc_entries SET revision=?,local_date=?,payload=? WHERE id=? AND revision=?',[e.revision,e.local_date,JSON.stringify(e),id,expected]));
+    const [,revision,name,unit,preparation,status]=catalogProjection(e);
+    assertChange(await tx.run('UPDATE fc_catalog_projection SET revision=?,name_key=?,unit=?,preparation=?,status=? WHERE id=? AND revision=?',[revision,name,unit,preparation,status,id,expected]));return e;
   });}
   async update(entry,expected,sequence){
     const e=structuredClone(entry);validateEntry(e);
@@ -223,7 +243,8 @@ export class SQLiteDiary {
     return this.#write('restore',sequence,async tx=>{
       const {n}=await tx.get('SELECT count(*) AS n FROM fc_entries',[]);
       const prefs=await tx.get('SELECT count(*) AS n FROM fc_goals',[]);
-      if(n!==0||prefs.n!==0)throw new DiaryConflict('Restore requires empty database');
+      const projection=await tx.get('SELECT count(*) AS n FROM fc_catalog_projection',[]);
+      if(n!==0||prefs.n!==0||projection.n!==0)throw new DiaryConflict('Restore requires empty database');
       for(const e of entries)await insert(tx,e);
       if(goals.revision>0)assertChange(await tx.run('INSERT INTO fc_goals(id,revision,payload) VALUES(1,?,?)',[goals.revision,JSON.stringify(goals.targets)]));
       return {restored:entries.length};

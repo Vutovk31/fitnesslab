@@ -1,6 +1,6 @@
 import {validateEntry} from '../dist/storage.js';
-// Migration slice only: caller must own a rollback-capable exclusive transaction
-// and verify exact v3 schema. Not called by SQLiteDiary.open or runtime writes.
+// Caller owns a rollback-capable exclusive transaction and verifies exact v3 schema.
+// SQLiteDiary advances user_version only after successful backfill.
 export const catalogNameKey=s=>s.trim().normalize('NFC').toLocaleLowerCase('ru-RU');
 export const CATALOG_TABLE="CREATE TABLE fc_catalog_projection (id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL, name_key TEXT NOT NULL, unit TEXT NOT NULL, preparation TEXT NOT NULL, status TEXT NOT NULL)";
 export const CATALOG_INDEX='CREATE INDEX fc_catalog_lookup ON fc_catalog_projection(name_key,unit,status,preparation,id)';
@@ -33,6 +33,6 @@ export async function buildCatalogProjection(tx){
   }
   const count=await tx.get('SELECT count(*) AS n FROM fc_catalog_projection',[]);
   check(count?.n===n&&seen===n&&used===stat.bytes,'Projection snapshot mismatch');
-  // Do not advance user_version until transactional write maintenance is integrated.
+  // Version advancement belongs to the enclosing migration.
   return {rows:seen,payloadBytes:used};
 }
