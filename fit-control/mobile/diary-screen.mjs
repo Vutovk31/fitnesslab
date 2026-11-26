@@ -1,6 +1,7 @@
 // Mount the existing diary/editor markup in a mobile shell. No storage fallback.
 import {persistentDiary} from './persistent-diary.mjs';
 import {inspectBackup} from './sqlite-diary.mjs';
+import {encryptBackup,decryptBackup,encryptedBackupMaxBytes} from './encrypted-backup.mjs';
 const fields=['name','meal_type','preparation','amount','unit','basis_amount','basis_unit','kcal','protein_g','fat_g','carbs_g','source_kind','source_reference'];
 const blank={name:'',meal_type:'breakfast',preparation:'unknown',amount:'',unit:'g',basis_amount:'100',basis_unit:'g',kcal:'',protein_g:'',fat_g:'',carbs_g:'',source_kind:'estimate',source_reference:''};
 const meals={breakfast:'Завтрак',lunch:'Обед',snack:'Перекус',dinner:'Ужин',other:'Другое'};
@@ -8,15 +9,15 @@ const statuses={confirmed:'Съедено',planned:'План',draft:'Черно�
 const fmt=n=>n===null?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(n);
 const decimal=n=>n===null?'':n.toLocaleString('en-US',{useGrouping:false,maximumSignificantDigits:21});
 const mounted=new WeakSet();
-export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve,filePort}){
+export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve,filePort,passphrasePort}){
   if(mounted.has(doc))throw new Error('Diary already mounted');
   if(typeof approve!=='function')throw new TypeError('Confirmation required');
   const c=persistentDiary({store,date,targets,idFactory,clock});
   const $=id=>{const e=doc.getElementById(id);if(!e)throw new Error('Missing diary element '+id);return e;};
-  // Port contract: read({maxBytes}) returns immutable text or null (cancel),
-  // write({text,filename}) returns true only after completed local save, null on cancel.
-  // Native host must bound reads before allocating; no automatic upload/fallback.
-  const backupEnabled=typeof filePort?.read==='function'&&typeof filePort?.write==='function'&&typeof store.exportBackup==='function'&&typeof store.restoreBackup==='function';
+  // Binary file port: read({maxBytes}) -> Uint8Array|null; write({bytes,filename}) -> true|null.
+  // Passphrase port: request({purpose}) -> string|null, never persists or logs input.
+  // Native host must bound reads before allocation; no plaintext file fallback.
+  const backupEnabled=typeof filePort?.read==='function'&&typeof filePort?.write==='function'&&typeof passphrasePort?.request==='function'&&typeof store.exportBackup==='function'&&typeof store.restoreBackup==='function';
   const backupStatus=$('backup-status');
   backupStatus.textContent=backupEnabled?'Выберите действие.':'Файловый доступ не подключён.';
   const day=$('day'),form=$('editor'),groups=$('groups'),error=$('error'),status=$('diary-status');
@@ -78,28 +79,40 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     finally{pending=false;render();}}
   async function backupAction(kind){
     if(pending||blocked||recoveryBlocked()||!backupEnabled||c.snapshot().phase!=='ready')return;
-    if(kind==='export'&&approve('Экспорт незашифрованной копии сохранённых тестовых данных?')!==true)return;
+    if(kind==='export'&&approve('Создать зашифрованную копию сохранённых тестовых данных? Без пароля восстановление невозможно.')!==true)return;
     pending=true;backupStatus.textContent='Подготовка…';render();
+    let restoring=false;
     try{
       if(kind==='export'){
-        const text=await store.exportBackup(3);
-        const saved=await filePort.write({text,filename:'FIT_CONTROL_backup_v3.json'});
+        const password=await passphrasePort.request({purpose:'export'});
+        if(password===null){backupStatus.textContent='Экспорт отменён.';return;}
+        const confirmation=await passphrasePort.request({purpose:'confirm-export'});
+        if(confirmation===null){backupStatus.textContent='Экспорт отменён.';return;}
+        if(typeof password!=='string'||password!==confirmation){backupStatus.textContent='Пароли не совпадают. Экспорт не выполнен.';return;}
+        const bytes=await encryptBackup(await store.exportBackup(3),password);
+        const saved=await filePort.write({bytes,filename:'FIT_CONTROL_backup.fcbk'});
         if(saved!==true&&saved!==null)throw Error('Unconfirmed file write');
         backupStatus.textContent=saved===true?'Файл сохранён.':'Экспорт отменён.';return;
       }
-      const text=await filePort.read({maxBytes:16*1024*1024});
-      if(text===null){backupStatus.textContent='Выбор файла отменён.';return;}
+      const input=await filePort.read({maxBytes:encryptedBackupMaxBytes});
+      if(input===null){backupStatus.textContent='Выбор файла отменён.';return;}
+      if(!(input instanceof Uint8Array)||input.byteLength<=49||input.byteLength>encryptedBackupMaxBytes)throw Error('Invalid encrypted file');
+      const bytes=new Uint8Array(input);
+      const password=await passphrasePort.request({purpose:'import'});
+      if(password===null){backupStatus.textContent='Восстановление отменено.';return;}
+      const text=await decryptBackup(bytes,password);
       const info=inspectBackup(text);
       const summary='Формат v'+info.version+'; записей: '+info.entries+'; удалённых: '+info.deleted+'; цели: '+(info.hasGoals?'есть':'нет')+'. Только пустая база.';
       backupStatus.textContent=summary;
       if(approve(summary+' Восстановить? Несохранённые формы будут очищены только после коммита.')!==true){backupStatus.textContent='Восстановление отменено.';return;}
+      restoring=true;
       const result=await c.restoreBackup(text,true);
       reset();resetGoals();
       backupStatus.textContent=result.refreshed?'Восстановлено.':'Восстановлено. Обновление не удалось — повторите чтение, не импорт.';
     }catch(e){
-      if(e?.code==='COMMIT_OUTCOME_UNKNOWN'){uncertain=true;blocked=true;backupStatus.textContent='Исход операции неизвестен. Закройте приложение, откройте заново и проверьте базу до повторного импорта.';}
-      else if(c.snapshot().error==='CONFLICT'){blocked=true;backupStatus.textContent='База не пуста. Восстановление запрещено.';}
-      else backupStatus.textContent=kind==='export'?'Сохранение файла не подтверждено.':'Восстановление не выполнено. Проверьте файл и состояние базы.';
+      if(restoring&&e?.code==='COMMIT_OUTCOME_UNKNOWN'){uncertain=true;blocked=true;backupStatus.textContent='Исход операции неизвестен. Закройте приложение, откройте заново и проверьте базу до повторного импорта.';}
+      else if(restoring&&c.snapshot().error==='CONFLICT'){blocked=true;backupStatus.textContent='База не пуста. Восстановление запрещено.';}
+      else backupStatus.textContent=kind==='export'?'Сохранение файла не подтверждено.':'Восстановление не выполнено. Проверьте пароль, файл и состояние базы.';
     }finally{pending=false;render();}
   }
   $('backup-export').addEventListener('click',()=>backupAction('export'));

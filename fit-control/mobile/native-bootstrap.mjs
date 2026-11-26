@@ -23,7 +23,7 @@ export async function startNativeDiary({capacitor,makeManager,doc,config,privacy
     const driver=nativeSQLiteDriver(connection,()=>manager.closeConnection(database,false));
     stage='SCHEMA';store=await SQLiteDiary.open(driver);
     const {targets}=await store.getGoals();
-    stage='UI';const ui=mount(doc,{...config,targets,store:trackedDiaryStore(store),filePort:undefined});
+    stage='UI';const ui=mount(doc,{...config,targets,store:trackedDiaryStore(store),filePort:undefined,passphrasePort:undefined});
     if(await ui.ready!==true)throw Error('Initial read failed');
     let closing;
     return {status:'ready',close(){if(!closing){main.setAttribute('inert','');status.textContent='Хранилище закрывается.';closing=store.close();}return closing;}};
