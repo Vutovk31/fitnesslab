@@ -37,7 +37,7 @@ export function persistentDiary({store,date,targets,idFactory,clock}) {
     busy=true;state={...state,error:null};
     try{
       let entry;
-      try{entry=await work();}catch(e){state={...state,error:e instanceof DiaryConflict?'CONFLICT':'WRITE_FAILED'};throw e;}
+      try{entry=await work();}catch(e){state={...state,error:e?.code==='COMMIT_OUTCOME_UNKNOWN'?'COMMIT_OUTCOME_UNKNOWN':e instanceof DiaryConflict?'CONFLICT':'WRITE_FAILED'};throw e;}
       // The storage promise resolves only after commit. A refresh failure cannot
       // turn a committed write into a failed write (which could cause duplicates).
       const refreshed=await selectDate(state.date);

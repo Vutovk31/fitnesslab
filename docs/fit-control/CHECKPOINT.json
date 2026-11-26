@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "026-M03C2-MOBILE-UI",
-  "status": "MOBILE_DIARY_UI_LOCAL_INTEGRATION_PASS_NATIVE_GATES_OPEN",
+  "cycle": "027-M04A1-NATIVE-BRIDGE-CANDIDATE",
+  "status": "NATIVE_TRANSACTION_BRIDGE_CANDIDATE_LOCAL_PASS_BOOTSTRAP_AND_BUILD_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M04A",
-    "title": "Native bootstrap and transaction bridge feasibility",
-    "scope": "Verify current official Capacitor and target SDK/build tooling, actual available environment and compatible pinned versions. Implement native bootstrap/transaction driver vertical slice for mobile diary when supported; no in-memory fallback, no remote deploy or paid signing without authorization. Preserve existing preview and scoped branch. Device acceptance remains M05; resolve durable goals and scalable backup before release.",
+    "id": "M04A2",
+    "title": "Native-only bootstrap and dependency feasibility",
+    "scope": "Review tagged plugin connection/version/lifecycle semantics (especially user_version, native locking and SQLite DDL), exact compatible Capacitor v8 dependency pins and availability. Harden candidate bridge and implement fail-closed native-only bootstrap/package scaffold if safe; no in-memory fallback, actual native installation/build/signing NOT_RUN unless supported. Distinguish candidate from native verified. Preserve main/backup and all automations.",
     "acceptance": [
-      "Verified compatible toolchain and explicit driver/transaction contract",
-      "Mobile shell bootstrap connected to genuine native SQLite driver where supported; distinguish build and device results",
-      "Fail closed on unsupported environment; no fabricated APK/IPA or device PASS"
+      "Explicit native connection ownership, schema initialization and unknown-commit recovery contract",
+      "Pinned candidate dependencies supported by upstream evidence; actual installation/build separate",
+      "Real local tests and unsupported-platform fail-closed; no false native PASS"
     ],
     "rollback": "Revert scoped source; preserve user data."
   },
@@ -57,24 +57,26 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M03C2_NODE_PASS_35_28_REGRESSION_7_NEW; MOCK_DOM_REAL_LOCAL_SQLITE; RESTORED_COMPILED_DOMAIN; FULL_REGRESSION_NOT_RUN; NATIVE_BRIDGE_NOT_IMPLEMENTED; DEVICE_UI_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
+    "runtime_tests": "M04A1_NODE_PASS_43_35_REGRESSION_8_NEW; PLUGIN_SHAPED_TEST_DOUBLE_REAL_LOCAL_SQLITE; MOCK_DOM; RESTORED_COMPILED_DOMAIN; NATIVE_BOOTSTRAP_NOT_IMPLEMENTED; NATIVE_BUILD_DEVICE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
-    "backup_release": "OPEN: scalable backup/export beyond 1000 rows or 2 MiB, durable goals, privacy and native file flow acceptance"
+    "backup_release": "OPEN: scalable backup/export beyond 1000 rows or 2 MiB, durable goals, privacy and native file flow acceptance",
+    "native_toolchain": "BLOCKED: no detected Android SDK/Gradle or Xcode; exact dependency lock/install not verified",
+    "ambiguous_commit": "OPEN: session fail-closed implemented; durable recovery/reconciliation and native lifecycle test pending"
   },
-  "parent_head": "e6e0c038dbde7c405f3f227f1d1077dab0388a13",
+  "parent_head": "443e6141c34dc42365ee32bbbeae6214a357def5",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE026.md",
-    "previous": "docs/fit-control/evidence/CYCLE025.md",
-    "test_count": 35,
-    "pass": 35,
+    "path": "docs/fit-control/evidence/CYCLE027.md",
+    "previous": "docs/fit-control/evidence/CYCLE026.md",
+    "test_count": 43,
+    "pass": 43,
     "fail": 0,
-    "scope": "Node 22.16.0 actual local file SQLite + mock DOM; 28 regression + 7 new; no native runtime",
+    "scope": "Node 22.16.0 real local SQLite 3.49.1; plugin-shaped test double and mock DOM; 35 regression + 8 new; native NOT_RUN",
     "tested_blobs": {
-      "mobile/persistent-diary.mjs": "ff4307f661628de2365d86560c95dcdd972c9644",
-      "mobile/diary-screen.mjs": "6fafb98c7eb65b534906302de96260dc2f0901bc",
+      "mobile/persistent-diary.mjs": "b5d43d9bb9d9af18bf9fbf31b9f29eb590fcace9",
+      "mobile/diary-screen.mjs": "5da7aa1e2f64da3af6bfc50d8a4d73f72e1b046c",
       "mobile/build-diary-shell.mjs": "9bc0288790127b7dab07fd375aef03b0b4d26f7c",
-      "tests/diary-screen.test.mjs": "6b8d6a3b86fdbdb0589a57fab14347c61d52f608",
+      "tests/diary-screen.test.mjs": "5d725ada01bd37d5b5d711072d8ea46bfd683a87",
       "tests/persistent-diary.test.mjs": "9de45e683c6adf3ebb780e37a9c43b1c069ac009",
       "mobile/sqlite-diary.mjs": "68106a5b63887020d8155f9c57298f8102fa1181",
       "tests/sqlite-diary.test.mjs": "c150b2446efc228cbff5acf0357347b52a48029e",
@@ -82,9 +84,10 @@
       "src/diary-editor.ts": "6dc95f1ee98683628f542ae5a18382ea1973b37a",
       "src/diary-view.ts": "7c42d9cd911853ceec07244d7d2d3868b1257a53",
       "src/storage.ts": "e345c8709dac176255c30a278e68bde9315cced6",
-      "src/nutrition.ts": "d5ed7f0f06f682625b8b1e4b0d538bcb1bde8ce7"
+      "src/nutrition.ts": "d5ed7f0f06f682625b8b1e4b0d538bcb1bde8ce7",
+      "mobile/native-sqlite-driver.mjs": "d0da0f7fd2d6039efdb8dbcb5e67fe3240b194e1",
+      "tests/native-sqlite-driver.test.mjs": "5808ef8dd3a4db8eb8365c814227163fa8f55706"
     },
-    "shell_sha256": "dd54bcec57fd260a54fdc1a3c560a4e433c3dcfc5ffdf16293424728642009b4",
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,

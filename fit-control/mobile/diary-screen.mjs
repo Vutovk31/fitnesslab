@@ -15,13 +15,13 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const day=$('day'),form=$('editor'),groups=$('groups'),error=$('error'),status=$('diary-status');
   const controls=Object.fromEntries(fields.map(k=>{const e=form.elements.namedItem(k);if(!e)throw new Error('Missing field '+k);return [k,e];}));
   const buttons=['save-confirm','save-plan','save-draft','save-edit','cancel','add'].map($);
-  let pending=false,editing=null,meta={},dirty=false,blocked=false,mode='confirmed';
+  let pending=false,editing=null,meta={},dirty=false,blocked=false,uncertain=false,mode='confirmed';
   const modes=[...doc.querySelectorAll('[data-mode]')];
   const el=(tag,text)=>{const e=doc.createElement(tag);e.textContent=text;return e;};
   const action=(label,fn,disabled=false)=>{const b=el('button',label);b.type='button';b.disabled=disabled;b.addEventListener('click',fn);return b;};
   function reset(){editing=null;meta={};dirty=false;for(const k of fields)controls[k].value=blank[k];}
   function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy;
-    day.value=s.date;day.disabled=pending;form.setAttribute('aria-busy',String(pending));
+    day.value=s.date;day.disabled=pending||uncertain;form.setAttribute('aria-busy',String(pending));
     for(const e of Object.values(controls))e.disabled=!ready;
     for(const b of buttons)b.disabled=!ready||blocked;
     $('cancel').disabled=pending;$('add').disabled=!ready||blocked;
@@ -29,7 +29,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     $('save-confirm').hidden=editing?.status==='confirmed';$('save-plan').hidden=editing?.status==='confirmed';$('save-draft').hidden=editing?.status==='confirmed';
     $('editor-heading').textContent=editing?'Редактировать продукт':'Добавить продукт';
     $('portion').textContent='Расчёт после подтверждения записи. Неизвестные значения оставьте пустыми.';
-    $('retry-diary').disabled=pending;
+    $('retry-diary').disabled=pending||uncertain;
     for(const b of modes){b.setAttribute('aria-pressed',String(b.dataset.mode===mode));b.disabled=pending;}
     const v=s.phase==='ready'?s.view:null;groups.replaceChildren();
     const total=t=>t.total===null?'Неизвестно (известно '+fmt(t.known)+')':fmt(t.total);
@@ -47,13 +47,13 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
       const f={name:e.food.name,meal_type:e.meal_type,preparation:e.food.preparation,amount:decimal(e.amount),unit:e.unit,basis_amount:decimal(e.food.basis_amount),basis_unit:e.food.basis_unit,kcal:decimal(e.food.kcal),protein_g:decimal(e.food.protein_g),fat_g:decimal(e.food.fat_g),carbs_g:decimal(e.food.carbs_g),source_kind:e.food.source.kind,source_reference:e.food.source.reference??''};
       for(const k of fields)controls[k].value=f[k];error.textContent='';render();controls.name.focus();
     }catch{error.textContent='Запись изменилась. Обновите дневник.';}}
-  async function load(next){if(pending)return false;pending=true;error.textContent='';status.textContent='Загрузка…';render();
+  async function load(next){if(pending||uncertain)return false;pending=true;error.textContent='';status.textContent='Загрузка…';render();
     try{const ok=await c.selectDate(next);if(ok)blocked=false;status.textContent=ok?'Дневник загружен.':'Не удалось загрузить. Повторите чтение.';return ok;}
     catch{status.textContent='Некорректная дата.';return false;}
     finally{pending=false;render();}}
   async function write(work,clear){if(pending||blocked||c.snapshot().phase!=='ready')return;pending=true;error.textContent='';status.textContent='Сохранение…';render();
     try{const result=await work();if(clear)reset();status.textContent=result.refreshed?'Сохранено.':'Сохранено. Обновление не удалось — повторите чтение, не запись.';}
-    catch{const conflict=c.snapshot().error==='CONFLICT';blocked=conflict;error.textContent=conflict?'Конфликт версий. Обновите дневник и заново выберите запись.':'Не сохранено. Проверьте поля или повторите позже.';status.textContent='Изменения не подтверждены.';}
+    catch{const code=c.snapshot().error;const conflict=code==='CONFLICT';uncertain=code==='COMMIT_OUTCOME_UNKNOWN';blocked=conflict||uncertain;if(uncertain){error.textContent='Исход сохранения неизвестен. Закройте приложение, откройте заново и проверьте запись до повторного ввода.';status.textContent='Требуется сверка базы.';return;}error.textContent=conflict?'Конфликт версий. Обновите дневник и заново выберите запись.':'Не сохранено. Проверьте поля или повторите позже.';status.textContent='Изменения не подтверждены.';}
     finally{pending=false;render();}}
   function remove(row){if(pending||blocked||!approve('Удалить запись?'))return;return write(()=>c.remove(row.id,row.revision),editing?.id===row.id);}
   form.addEventListener('input',ev=>{dirty=true;if(ev.target===controls.source_kind||ev.target===controls.source_reference){delete meta.source_retrieved_at;delete meta.source_license;}});
@@ -61,8 +61,8 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     if(editing?.status==='confirmed'&&intent!=='edit')return;
     const f={...meta,local_date:c.snapshot().date,timezone:meta.timezone??timezone};for(const k of fields)f[k]=controls[k].value;
     return write(()=>c.save(f,intent,editing),true);});
-  day.addEventListener('change',()=>{const next=day.value;if(pending){render();return;}if((dirty||editing)&&!approve('Отменить несохранённую форму?')){render();return;}reset();return load(next);});
-  $('retry-diary').addEventListener('click',()=>{if(pending)return;if(blocked){if(!approve('Сбросить конфликтующую форму?'))return;reset();}return load(c.snapshot().date);});
+  day.addEventListener('change',()=>{const next=day.value;if(pending||uncertain){render();return;}if((dirty||editing)&&!approve('Отменить несохранённую форму?')){render();return;}reset();return load(next);});
+  $('retry-diary').addEventListener('click',()=>{if(pending||uncertain)return;if(blocked){if(!approve('Сбросить конфликтующую форму?'))return;reset();}return load(c.snapshot().date);});
   for(const id of ['cancel','add'])$(id).addEventListener('click',()=>{if(pending||(dirty&&!approve('Очистить несохранённую форму?')))return;reset();error.textContent='';render();if(id==='add')controls.name.focus();});
   for(const b of modes)b.addEventListener('click',()=>{if(pending||!['confirmed','planned','forecast'].includes(b.dataset.mode))return;mode=b.dataset.mode;render();});
   mounted.add(doc);reset();render();$('main-content').removeAttribute('inert');$('connection-status').textContent='Подключено хранилище. Цели действуют только в текущем сеансе.';const ready=load(date);return {ready,snapshot:c.snapshot};
