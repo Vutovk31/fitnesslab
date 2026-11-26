@@ -1,0 +1,10 @@
+{
+  "name": "fit-control-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {"build:web": "tsc -p ../tsconfig.json && node build-native-web.mjs"},
+  "dependencies": {"@capacitor/core":"8.6.3","@capacitor/android":"8.6.3","@capacitor/ios":"8.6.3","@capacitor-community/sqlite":"8.1.1"},
+  "devDependencies": {"@capacitor/cli":"8.6.3","esbuild":"0.28.2","typescript":"5.8.3"}
+}

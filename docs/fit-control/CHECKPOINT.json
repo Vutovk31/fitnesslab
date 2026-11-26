@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "027-M04A1-NATIVE-BRIDGE-CANDIDATE",
-  "status": "NATIVE_TRANSACTION_BRIDGE_CANDIDATE_LOCAL_PASS_BOOTSTRAP_AND_BUILD_OPEN",
+  "cycle": "028-M04A2-NATIVE-BOOTSTRAP",
+  "status": "NATIVE_BOOTSTRAP_CANDIDATE_LOCAL_PASS_DEPENDENCY_INSTALL_BUILD_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,36 +42,37 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M04A2",
-    "title": "Native-only bootstrap and dependency feasibility",
-    "scope": "Review tagged plugin connection/version/lifecycle semantics (especially user_version, native locking and SQLite DDL), exact compatible Capacitor v8 dependency pins and availability. Harden candidate bridge and implement fail-closed native-only bootstrap/package scaffold if safe; no in-memory fallback, actual native installation/build/signing NOT_RUN unless supported. Distinguish candidate from native verified. Preserve main/backup and all automations.",
+    "id": "M04B1",
+    "title": "Reproducible native dependency install and build",
+    "scope": "Resolve exact transitive lockfile and verify dependency install/build in authorized environment. Generate Android/iOS native projects using pinned candidate packages, run real build where SDK available; no invented APK/IPA, no paid signing/deploy or recurring automation. If unchanged toolchain blocker, do not blindly retry; produce actionable build handoff and choose independent pre-release task (durable goals, scalable backup, recovery/privacy) as allowed. Real physical device acceptance M05 remains mandatory.",
     "acceptance": [
-      "Explicit native connection ownership, schema initialization and unknown-commit recovery contract",
-      "Pinned candidate dependencies supported by upstream evidence; actual installation/build separate",
-      "Real local tests and unsupported-platform fail-closed; no false native PASS"
+      "Actual dependency lock/install and compile evidence, or explicitly blocked with reproducible handoff",
+      "Native project generation and exact SHA build artifact only if actually produced",
+      "Privacy, uncertain commit, backup and device gates not waived"
     ],
-    "rollback": "Revert scoped source; preserve user data."
+    "rollback": "Scoped source revert only; preserve user data."
   },
   "gates": {
     "local_workspace_reconciliation": "UNKNOWN; before replacing legacy files",
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M04A1_NODE_PASS_43_35_REGRESSION_8_NEW; PLUGIN_SHAPED_TEST_DOUBLE_REAL_LOCAL_SQLITE; MOCK_DOM; RESTORED_COMPILED_DOMAIN; NATIVE_BOOTSTRAP_NOT_IMPLEMENTED; NATIVE_BUILD_DEVICE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
+    "runtime_tests": "M04A2_NODE_PASS_51_43_REGRESSION_8_NEW; REAL_LOCAL_SQLITE_PLUGIN_SHAPED_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_ENTRY_BUNDLE_INSTALL_BUILD_NOT_RUN; NATIVE_DEVICE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: scalable backup/export beyond 1000 rows or 2 MiB, durable goals, privacy and native file flow acceptance",
-    "native_toolchain": "BLOCKED: no detected Android SDK/Gradle or Xcode; exact dependency lock/install not verified",
-    "ambiguous_commit": "OPEN: session fail-closed implemented; durable recovery/reconciliation and native lifecycle test pending"
+    "native_toolchain": "BLOCKED: no Android SDK/Gradle or Xcode verified in current environment; direct candidate pins recorded; registry install, lockfile, esbuild bundle and native projects NOT_RUN",
+    "ambiguous_commit": "OPEN: session fail-closed implemented; durable recovery/reconciliation and native lifecycle test pending",
+    "native_privacy": "OPEN: unencrypted synthetic-only candidate; app-private storage/backup policy, encryption and consent decision required before real health data"
   },
-  "parent_head": "443e6141c34dc42365ee32bbbeae6214a357def5",
+  "parent_head": "5dde3f53e6fbb464657d42b433ccfecf6371eae1",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE027.md",
-    "previous": "docs/fit-control/evidence/CYCLE026.md",
-    "test_count": 43,
-    "pass": 43,
+    "path": "docs/fit-control/evidence/CYCLE028.md",
+    "previous": "docs/fit-control/evidence/CYCLE027.md",
+    "test_count": 51,
+    "pass": 51,
     "fail": 0,
-    "scope": "Node 22.16.0 real local SQLite 3.49.1; plugin-shaped test double and mock DOM; 35 regression + 8 new; native NOT_RUN",
+    "scope": "Node 22.16.0 local SQLite + plugin-shaped double/mock DOM; 43 regression + 8 new; packaging static only; native install/build NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "b5d43d9bb9d9af18bf9fbf31b9f29eb590fcace9",
       "mobile/diary-screen.mjs": "5da7aa1e2f64da3af6bfc50d8a4d73f72e1b046c",
@@ -86,7 +87,14 @@
       "src/storage.ts": "e345c8709dac176255c30a278e68bde9315cced6",
       "src/nutrition.ts": "d5ed7f0f06f682625b8b1e4b0d538bcb1bde8ce7",
       "mobile/native-sqlite-driver.mjs": "d0da0f7fd2d6039efdb8dbcb5e67fe3240b194e1",
-      "tests/native-sqlite-driver.test.mjs": "5808ef8dd3a4db8eb8365c814227163fa8f55706"
+      "tests/native-sqlite-driver.test.mjs": "5808ef8dd3a4db8eb8365c814227163fa8f55706",
+      "mobile/native-bootstrap.mjs": "fd230de879403f9a14dad0e9ef5614af4366d764",
+      "mobile/native-entry.mjs": "e5183695575fdbb957cff860d3ceb6a46c5d6182",
+      "mobile/package.json": "71635f30339a0f439711ffe2f7e53b7332c8bdea",
+      "mobile/capacitor.config.json": "9e75690f89af665e63b5f4a6bf55e4c1f9528889",
+      "mobile/build-native-web.mjs": "a9f824fa80ab53b2bfcf520f0c87d17467bd03ba",
+      "mobile/.gitignore": "ba6214d47352d4669bdfbb6a1d6d3c8ac0c45fac",
+      "tests/native-bootstrap.test.mjs": "f58893abf6abe6200aa82049aef5c9a40244deb7"
     },
     "browser": {
       "status": "NOT_RUN_BLOCKED",

@@ -1,0 +1,6 @@
+{
+  "appId": "com.vutovka.fitcontrol",
+  "appName": "FIT CONTROL",
+  "webDir": "www",
+  "plugins": {"CapacitorSQLite":{"iosDatabaseLocation":"Library/CapacitorDatabase","iosIsEncryption":false,"androidIsEncryption":false}}
+}
