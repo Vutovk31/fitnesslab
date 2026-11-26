@@ -6,7 +6,7 @@ import sys
 from functools import lru_cache
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ALLOWED = {ROOT / p for p in ('dist/nutrition.js', 'dist/storage.js', 'dist/diary-view.js', 'dist/diary-editor.js', 'preview/diary-preview.mjs', 'preview/daily-report.mjs', 'preview/voice.mjs', 'preview/transcript.mjs', 'preview/training.mjs')}
+ALLOWED = {ROOT / p for p in ('dist/nutrition.js', 'dist/storage.js', 'dist/diary-view.js', 'dist/diary-editor.js', 'preview/diary-preview.mjs', 'preview/daily-report.mjs', 'preview/voice.mjs', 'preview/transcript.mjs', 'preview/training.mjs', 'preview/timer.mjs')}
 PATTERN = re.compile(r"(\bfrom\s+)(['\"])(\.{1,2}/[^'\"]+)\2")
 
 @lru_cache(maxsize=None)
