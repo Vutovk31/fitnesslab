@@ -8,6 +8,15 @@ import {dayBalance} from '../dist/nutrition.js';
 const SCHEMA = 'CREATE TABLE fc_entries (id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), local_date TEXT NOT NULL, payload TEXT NOT NULL)';
 const INDEX = 'CREATE INDEX fc_entries_date ON fc_entries(local_date)';
 const GOALS = 'CREATE TABLE fc_goals (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), payload TEXT NOT NULL)';
+const RECOVERY = "CREATE TABLE fc_recovery (id INTEGER PRIMARY KEY CHECK(id=1), seq INTEGER NOT NULL CHECK(seq BETWEEN 1 AND 9007199254740991), kind TEXT NOT NULL CHECK(kind IN ('create','update','remove','goals','restore')), state TEXT NOT NULL CHECK(state IN ('prepared','committed','idle')))";
+const KINDS=['create','update','remove','goals','restore'];
+const RECOVERY_SELECT='SELECT id,seq,kind,state FROM fc_recovery WHERE id=1';
+function recoveryRow(row){
+  if(!row)return {seq:0,kind:null,state:'idle'};
+  check(row.id===1&&Number.isSafeInteger(row.seq)&&row.seq>0&&KINDS.includes(row.kind)&&['prepared','committed','idle'].includes(row.state),'Corrupt recovery journal');
+  return row;
+}
+function recoveryView(row){return {sequence:row.seq,kind:row.kind,status:row.state==='prepared'?'not_applied':row.state==='committed'?'committed':'none'};}
 const GOAL_KEYS=['carbs_g','fat_g','kcal','protein_g'];
 const MAX_ROWS=1000, MAX_BYTES=2*1024*1024;
 // v3 is a bounded larger JSON snapshot, not a streaming file format.
@@ -34,7 +43,8 @@ function readGoals(row){
 async function verifySchema(tx,version){
   const objects=await tx.all("SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",[]);
   const expected=[{type:'table',name:'fc_entries',sql:SCHEMA},{type:'index',name:'fc_entries_date',sql:INDEX}];
-  if(version===2)expected.push({type:'table',name:'fc_goals',sql:GOALS});
+  if(version>=2)expected.push({type:'table',name:'fc_goals',sql:GOALS});
+  if(version>=3)expected.push({type:'table',name:'fc_recovery',sql:RECOVERY});
   check(objects.length===expected.length&&expected.every((e,i)=>Object.keys(e).every(k=>objects[i][k]===e[k])),'Unexpected schema objects');
 }
 function assertChange(result) { if(result?.changes!==1) throw new DiaryConflict('Unexpected write count'); }
@@ -80,11 +90,12 @@ export class SQLiteDiary {
         const tables=await tx.all("SELECT name FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",[]);
         check(tables.length===0,'Unrecognized database; migration refused');
         await tx.run(SCHEMA,[]);await tx.run(INDEX,[]);
-      } else check(v===1||v===2,'Unsupported schema version');
-      if(v!==2){
+      } else check(v===1||v===2||v===3,'Unsupported schema version');
+      if(v<2){
         await verifySchema(tx,1);await tx.run(GOALS,[]);await tx.run('PRAGMA user_version = 2',[]);
       }
-      await verifySchema(tx,2);
+      if(v<3){await verifySchema(tx,2);await tx.run(RECOVERY,[]);await tx.run('PRAGMA user_version = 3',[]);}
+      await verifySchema(tx,3);recoveryRow(await tx.get(RECOVERY_SELECT,[]));
       readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
       await tx.all(SELECT+' LIMIT 0',[]);
     });
@@ -92,30 +103,60 @@ export class SQLiteDiary {
   }
   #tx(work){if(this.#closed)throw new Error('Storage closed');return this.#driver.transaction(work);}
   async close(){if(!this.#closing){this.#closed=true;this.#closing=Promise.resolve().then(()=>this.#driver.close());}return this.#closing;}
-  async create(entry){
-    const e=structuredClone(entry);validateEntry(e);check(e.revision===1&&e.status!=='deleted','Invalid initial entry');
+  // The journal contains only a sequence, operation kind and outcome, never food or goal payload.
+  async prepareOperation(kind){
+    check(KINDS.includes(kind),'Invalid operation kind');
     return this.#tx(async tx=>{
+      const old=recoveryRow(await tx.get(RECOVERY_SELECT,[]));
+      if(old.state!=='idle')throw new DiaryConflict('Recovery acknowledgement required');
+      check(old.seq<Number.MAX_SAFE_INTEGER,'Recovery sequence exhausted');const seq=old.seq+1;
+      if(old.seq===0)assertChange(await tx.run("INSERT INTO fc_recovery(id,seq,kind,state) VALUES(1,?,?,'prepared')",[seq,kind]));
+      else assertChange(await tx.run("UPDATE fc_recovery SET seq=?,kind=?,state='prepared' WHERE id=1 AND seq=? AND state='idle'",[seq,kind,old.seq]));
+      return seq;
+    });
+  }
+  async getRecovery(){try{return await this.#tx(async tx=>recoveryView(recoveryRow(await tx.get(RECOVERY_SELECT,[]))));}catch{return {sequence:null,kind:null,status:'unknown'};}}
+  async acknowledgeRecovery(sequence,status,approved=false){
+    check(approved===true&&Number.isSafeInteger(sequence)&&sequence>0&&['committed','not_applied'].includes(status),'Explicit recovery acknowledgement required');
+    return this.#tx(async tx=>{
+      const row=recoveryRow(await tx.get(RECOVERY_SELECT,[]));
+      if(row.seq!==sequence||recoveryView(row).status!==status)throw new DiaryConflict('Recovery state changed');
+      assertChange(await tx.run("UPDATE fc_recovery SET state='idle' WHERE id=1 AND seq=? AND state=?",[sequence,row.state]));
+      return true;
+    });
+  }
+  #write(kind,sequence,work){return this.#tx(async tx=>{
+    const row=recoveryRow(await tx.get(RECOVERY_SELECT,[]));
+    if(sequence===undefined){if(row.state!=='idle')throw new DiaryConflict('Recovery acknowledgement required');}
+    else if(!Number.isSafeInteger(sequence)||row.seq!==sequence||row.kind!==kind||row.state!=='prepared')throw new DiaryConflict('Operation token stale or invalid');
+    const result=await work(tx);
+    if(sequence!==undefined)assertChange(await tx.run("UPDATE fc_recovery SET state='committed' WHERE id=1 AND seq=? AND state='prepared'",[sequence]));
+    return result;
+  });}
+  async create(entry,sequence){
+    const e=structuredClone(entry);validateEntry(e);check(e.revision===1&&e.status!=='deleted','Invalid initial entry');
+    return this.#write('create',sequence,async tx=>{
       if(await tx.get(SELECT+' WHERE id=?',[e.id]))throw new DiaryConflict('Duplicate id');
       await insert(tx,e);return e;
     });
   }
-  async #change(id,expected,transform){return this.#tx(async tx=>{
+  async #change(id,expected,transform,kind,sequence){return this.#write(kind,sequence,async tx=>{
     const row=await tx.get(SELECT+' WHERE id=?',[id]);const old=row?decode(row):null;
     if(!old||old.revision!==expected||old.status==='deleted')throw new DiaryConflict('Revision conflict or deleted entry');
     const e=transform(old);validateEntry(e);
     assertChange(await tx.run('UPDATE fc_entries SET revision=?,local_date=?,payload=? WHERE id=? AND revision=?',[e.revision,e.local_date,JSON.stringify(e),id,expected]));return e;
   });}
-  async update(entry,expected){
+  async update(entry,expected,sequence){
     const e=structuredClone(entry);validateEntry(e);
     return this.#change(e.id,expected,old=>{
       check(e.revision===expected&&e.created_at===old.created_at&&e.updated_at>=old.updated_at&&e.status!=='deleted','Invalid update');
       return {...e,revision:old.revision+1};
-    });
+    },'update',sequence);
   }
-  async remove(id,expected,updatedAt){return this.#change(id,expected,old=>{
+  async remove(id,expected,updatedAt,sequence){return this.#change(id,expected,old=>{
     check(typeof updatedAt==='string'&&updatedAt>=old.updated_at,'Invalid deletion timestamp');
     return {...old,revision:old.revision+1,status:'deleted',updated_at:updatedAt};
-  });}
+  },'remove',sequence);}
   async list(date){dayBalance([],date,null);return this.#tx(async tx=>(await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date])).map(decode));}
   async exportBackup(version=2){
     check(version===2||version===3,'Unsupported export version');
@@ -146,9 +187,9 @@ export class SQLiteDiary {
       }
       parts.push(suffix);const text=parts.join('');backupRows(text);return text;
     });}
-  async restoreBackup(text,approved=false){
+  async restoreBackup(text,approved=false,sequence){
     check(approved===true,'Explicit approval required');const {entries,goals}=backupRows(text);
-    return this.#tx(async tx=>{
+    return this.#write('restore',sequence,async tx=>{
       const {n}=await tx.get('SELECT count(*) AS n FROM fc_entries',[]);
       const prefs=await tx.get('SELECT count(*) AS n FROM fc_goals',[]);
       if(n!==0||prefs.n!==0)throw new DiaryConflict('Restore requires empty database');
@@ -158,9 +199,9 @@ export class SQLiteDiary {
     });
   }
   async getGoals(){return this.#tx(async tx=>readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])));}
-  async setGoals(targets,expectedRevision){
+  async setGoals(targets,expectedRevision,sequence){
     const value=validateGoals(structuredClone(targets));check(Number.isSafeInteger(expectedRevision)&&expectedRevision>=0&&expectedRevision<Number.MAX_SAFE_INTEGER,'Invalid goal revision');
-    return this.#tx(async tx=>{
+    return this.#write('goals',sequence,async tx=>{
       const old=readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
       if(old.revision!==expectedRevision)throw new DiaryConflict('Goal revision conflict');
       const revision=expectedRevision+1,payload=JSON.stringify(value);
