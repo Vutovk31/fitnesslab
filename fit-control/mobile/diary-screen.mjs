@@ -1,5 +1,6 @@
 // Mount the existing diary/editor markup in a mobile shell. No storage fallback.
 import {persistentDiary} from './persistent-diary.mjs';
+import {mountCandidateReview} from './candidate-review.mjs';
 import {audioLease} from './audio-lease.mjs';
 import {mountRecognitionScreen} from './recognition-screen.mjs';
 import {mountCaptureScreen} from './voice-screen.mjs';
@@ -42,7 +43,11 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const transcriptText=$('transcript-text'),transcriptLine=$('transcript-line'),transcriptResult=$('transcript-result');
   let transcriptCandidate=null;
   function invalidateTranscript(){transcriptCandidate=null;transcriptResult.textContent='';}
-  function clearTranscript(){invalidateTranscript();transcriptText.value='';transcriptLine.value='1';}
+  function clearTranscript(){review.clear();invalidateTranscript();transcriptText.value='';transcriptLine.value='1';}
+  const review=mountCandidateReview(doc,{approve,context:()=>({text:transcriptText.value,date:c.snapshot().date,timezone,allowed:canPrepareTranscript()}),transfer:f=>{
+    if(!canPrepareTranscript()||approve('Перенести позицию в редактор? '+(dirty||editing?'Текущая несохранённая форма будет заменена. ':'')+'Проверьте продукт и порцию; сохранение отдельно.')!==true)return false;
+    reset();for(const k of fields)controls[k].value=f[k]??'';dirty=true;invalidateTranscript();error.textContent='';controls.name.focus();render();return true;
+  }});
   const recognition=mountRecognitionScreen(doc,{port:recognitionPort,approve,lease,onAccept:text=>{clearTranscript();transcriptText.value=text;transcriptText.focus();render();}});
   const recoveryBlocked=()=>c.snapshot().recovery.status!=='none';
   function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy&&s.recovery.status==='none';
@@ -50,7 +55,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     $('recovery-status').textContent=!s.recoveryEnabled?'Журнал не подключён.':r.status==='none'?'Незавершённых операций нет.':r.status==='unknown'?'Результат неизвестен. Обновите журнал или перезапустите приложение.':(r.status==='committed'?'Операция сохранена: ':'Операция не применена на момент проверки: ')+kind+'. Проверьте дневник и подтвердите результат.';
     $('recovery-ack').disabled=pending||uncertain||s.busy||s.phase!=='ready'||!['committed','not_applied'].includes(r.status);
     const canTranscript=ready&&!blocked&&!uncertain;
-    voice.sync(canTranscript);recognition.sync(canTranscript);
+    voice.sync(canTranscript);recognition.sync(canTranscript);review.render(canTranscript);
     transcriptText.disabled=transcriptLine.disabled=$('transcript-preview').disabled=!canTranscript;
     $('transcript-apply').disabled=!canTranscript||!transcriptCandidate;
     $('transcript-clear').disabled=pending;
@@ -162,7 +167,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     const s=c.snapshot(),r=s.recovery;
     if(pending||uncertain||s.phase!=='ready'||!['committed','not_applied'].includes(r.status)||approve('Подтвердить проверенный результат? Несохранённые формы будут сброшены. Операция не будет повторена.')!==true)return;
     pending=true;render();
-    try{const ok=await c.acknowledgeRecovery(r.sequence,r.status,true);reset();resetGoals();clearTranscript();blocked=false;error.textContent='';status.textContent=ok?'Результат подтверждён.':'Результат подтверждён, требуется обновление.';}
+    try{const ok=await c.acknowledgeRecovery(r.sequence,r.status,true);reset();resetGoals();if(r.kind!=='create')clearTranscript();blocked=false;error.textContent='';status.textContent=ok?'Результат подтверждён.':'Результат подтверждён, требуется обновление.';}
     catch{error.textContent='Подтверждение не завершено. Обновите журнал; не повторяйте операцию.';}
     finally{pending=false;render();}
   });

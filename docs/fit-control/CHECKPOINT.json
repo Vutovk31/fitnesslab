@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "044-M06D1-NUTRITION-CANDIDATES",
-  "status": "NUTRITION_CANDIDATE_PARSER_LOCAL_PASS_UI_NATIVE_OPEN",
+  "cycle": "045-M06D2-NUTRITION-REVIEW",
+  "status": "NUTRITION_REVIEW_UI_LOCAL_PASS_NATIVE_BUILD_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M06D2",
-    "title": "Multi-product candidate review in mobile diary",
-    "scope": "Integrate bounded nutritionCandidates into mobile transcript UI. Display original fragments, explicit/missing/unresolved status, quantities and units with clear warnings that candidates are not confirmed consumed records. Require review of meal/unit and quantity, explicit selection and transfer one candidate at a time into existing editor, separate tracked save. Preserve unresolved text, manual single-line path, dirty form consent, date/recovery/stale guards, no bulk/automatic write or fabricated KБЖУ. Test local SQLite/mock DOM; native privacy/build/actual STT gates unchanged, no blind SDK retry, main/backup or automation changes.",
+    "id": "M06D3",
+    "title": "Local nutrition catalog candidate matching",
+    "scope": "Review existing preview catalog, nutrition/storage/editor and tests. Implement bounded exact local candidate matching from validated entries/templates with preserved source/provenance, preparation, basis units and unknowns; distinguish no/unique/multiple matches, avoid fuzzy silent identification, no automatic assignment or fabricated KБЖУ. Test pure matcher and existing editor compatibility; keep native privacy/build/STT gates closed and separate. No real data, network, SDK retry, main/backup or automation changes.",
     "acceptance": [
-      "Multi-candidate preview and explicit selected candidate transfer, no implicit DB writes",
-      "Missing/ambiguous candidates and stale/dirty/date/recovery scenarios handled without guessing",
-      "Local tests pass; native acceptance separate"
+      "Exact local variants, unit/preparation/source distinctions and unknowns verified",
+      "Ambiguity and no match do not silently assign nutrient data; explicit user selection required",
+      "Local evidence and existing contracts preserved; actual native acceptance separately open"
     ],
     "rollback": "Scoped source revert only; preserve user data and keys."
   },
@@ -57,7 +57,7 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M06D1_NODE_PASS_148_142_REGRESSION_6_NEW; PURE_PARSER_EDITOR_AND_INHERITED_REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
+    "runtime_tests": "M06D2_NODE_PASS_152_148_REGRESSION_4_NEW; REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM_MEDIA_STT; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
@@ -65,21 +65,21 @@
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
     "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN",
     "voice": "OPEN_NATIVE: manual transcript, synthetic capture, offline recognition contract and integrated review/lease local PASS; actual audio-to-provider integration, microphone/STT, ru-RU availability, permissions/network/lifecycle/teardown/device acceptance NOT_RUN",
-    "nutrition_intelligence": "OPEN: bounded multi-product parser local PASS; review UI, catalog matching and semantic language understanding pending; no automatic write"
+    "nutrition_intelligence": "OPEN: bounded parser and single-candidate review UI local PASS; queue in-memory not save-linked, exact catalog matching and semantic language understanding pending; no auto writes"
   },
-  "parent_head": "75a36cc38a698abdfb5a9b0990c8f20f96081e21",
+  "parent_head": "19a5a28ffc4aae59e64530b0fbd12969cd46ae8f",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE044.md",
-    "previous": "docs/fit-control/evidence/CYCLE043.md",
-    "test_count": 148,
-    "pass": 148,
+    "path": "docs/fit-control/evidence/CYCLE045.md",
+    "previous": "docs/fit-control/evidence/CYCLE044.md",
+    "test_count": 152,
+    "pass": 152,
     "fail": 0,
-    "scope": "Node 22.16.0 pure parser/editor + inherited real SQLite/WebCrypto/mock DOM; 142 regression +6 new; native NOT_RUN",
+    "scope": "Node 22.16.0 actual local SQLite/WebCrypto + mock DOM/ports; 148 regression +4 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
-      "mobile/diary-screen.mjs": "820184241fc592b45d5506a18ed1b96ec37f1b11",
-      "mobile/build-diary-shell.mjs": "c87506c38337061a9fc53a8879502cbe874ed731",
-      "tests/diary-screen.test.mjs": "0c2c4ec0b277339816d78c4feafb6cff9ea5d6a1",
+      "mobile/diary-screen.mjs": "5069bcee9afd21f95984b0d839b808decc7082b9",
+      "mobile/build-diary-shell.mjs": "63b769e2f03e3b94d084b5a340ac0002da253420",
+      "tests/diary-screen.test.mjs": "b2c3f57377c3ae3b1ad0a44b6a82483fe00dca40",
       "tests/persistent-diary.test.mjs": "9de45e683c6adf3ebb780e37a9c43b1c069ac009",
       "mobile/sqlite-diary.mjs": "123fcd4e0aab331f1723accd531dc72d1a75d391",
       "tests/sqlite-diary.test.mjs": "508b81b9de12a02e215c62dba52aa09de0c8413d",
@@ -114,8 +114,11 @@
       "mobile/audio-lease.mjs": "ccb167f4dec08221d3e762dd360b7e7a3f4bdba4",
       "mobile/recognition-screen.mjs": "f34948c604957d74b1416e583e9a09278046dc25",
       "mobile/nutrition-candidates.mjs": "314b672be69385749d642038058bef1f15c93155",
-      "tests/nutrition-candidates.test.mjs": "bac724ed832f9f92b38d820fffb8b1b9640f3207"
+      "tests/nutrition-candidates.test.mjs": "bac724ed832f9f92b38d820fffb8b1b9640f3207",
+      "mobile/candidate-review.mjs": "420367b840991ff07b25e35310bebc07209f51d3"
     },
+    "shell_sha256": "0d9e306a88c2aadbbf0580176dad4c9f61df2bec5cceb9403c8d7ca84dd36a9b",
+    "shell_bytes": 15616,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
