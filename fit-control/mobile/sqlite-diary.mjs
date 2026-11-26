@@ -1,7 +1,7 @@
 import {validateEntry, DiaryConflict} from '../dist/storage.js';
 import {dayBalance} from '../dist/nutrition.js';
 import {matchNutrition,applyNutritionMatch} from './nutrition-matcher.mjs';
-import {CATALOG_TABLE,CATALOG_INDEX,buildCatalogProjection,catalogProjection} from './catalog-projection.mjs';
+import {CATALOG_TABLE,CATALOG_INDEX,buildCatalogProjection,catalogProjection,rebuildCatalogProjection} from './catalog-projection.mjs';
 
 // Driver owns an exclusive transaction until callback settles, commits only on
 // success, rolls back on failure, serializes callbacks on a connection, and
@@ -98,6 +98,25 @@ async function verifyProjectionCoverage(tx){
   const orphan=await tx.get('SELECT p.id FROM fc_catalog_projection p LEFT JOIN fc_entries e ON e.id=p.id WHERE e.id IS NULL LIMIT 1',[]);
   check(!missing&&!orphan,'Catalog projection coverage mismatch');
 }
+async function auditProjection(tx){
+    await verifySchema(tx,4);
+    check((await tx.get('PRAGMA user_version',[]))?.user_version===4,'Expected schema v4');
+    const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries LIMIT ?)',[LARGE_ROWS+1]);
+    const projected=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_catalog_projection LIMIT ?)',[LARGE_ROWS+1]);
+    check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=LARGE_ROWS&&projected?.n===count.n,'Catalog audit count or row limit');
+    const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes, coalesce(max(length(CAST(local_date AS BLOB))),0) AS dateBytes FROM fc_entries',[]);
+    check(['bytes','largest','idBytes','dateBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=LARGE_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36&&stat.dateBytes<=10,'Catalog audit byte limit');
+    const ps=await tx.get('SELECT coalesce(max(length(CAST(id AS BLOB))+length(CAST(name_key AS BLOB))+length(CAST(unit AS BLOB))+length(CAST(preparation AS BLOB))+length(CAST(status AS BLOB))),0) AS bytes FROM fc_catalog_projection',[]);
+    check(Number.isSafeInteger(ps?.bytes)&&ps.bytes>=0&&ps.bytes<=ROW_BYTES,'Catalog projection byte limit');
+    await verifyProjectionCoverage(tx);
+    let seen=0,used=0,cursor='';
+    while(seen<count.n){
+      const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
+      check(Array.isArray(rows)&&rows.length===Math.min(PAGE,count.n-seen),'Incomplete audit page');
+      for(const row of rows){const e=decode(row);check(e.id>cursor,'Invalid audit order');used+=bytes(row.payload);check(used<=LARGE_BYTES,'Catalog audit byte limit');await verifyProjectionRow(tx,e);cursor=e.id;seen++;}
+    }
+    check(seen===count.n&&used===stat.bytes,'Catalog audit snapshot mismatch');return {rows:seen,payloadBytes:used};
+}
 export class SQLiteDiary {
   #driver; #closed=false; #closing;
   constructor(driver, token) { if(token!==openToken) throw new TypeError('Use SQLiteDiary.open');this.#driver=driver; }
@@ -140,26 +159,23 @@ export class SQLiteDiary {
       return {date,entries,goals:readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])),recovery:recoveryView(recoveryRow(await tx.get(RECOVERY_SELECT,[])))};
     });
   }
+  // Explicit maintenance path; normal open may reject damaged projection coverage.
+  static async repairCatalog(driver,approved=false){
+    check(approved===true,'Explicit catalog repair approval required');
+    return driver.transaction(async tx=>{
+      check((await tx.get('PRAGMA user_version',[]))?.user_version===4,'Expected schema v4');await verifySchema(tx,4);
+      const journal=recoveryRow(await tx.get(RECOVERY_SELECT,[]));
+      check(journal.state==='idle','Recovery acknowledgement required before repair');
+      const goalSize=await tx.get('SELECT coalesce(max(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
+      check(Number.isSafeInteger(goalSize?.bytes)&&goalSize.bytes>=0&&goalSize.bytes<=ROW_BYTES,'Repair goals byte limit');
+      readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
+      const result=await rebuildCatalogProjection(tx),audit=await auditProjection(tx);
+      check(result.rows===audit.rows&&result.payloadBytes===audit.payloadBytes,'Repair audit mismatch');
+      return audit;
+    });
+  }
   // Full bounded audit only. Never repair or issue an indexed-read authorization.
-  async auditCatalog(){return this.#tx(async tx=>{
-    await verifySchema(tx,4);
-    check((await tx.get('PRAGMA user_version',[]))?.user_version===4,'Expected schema v4');
-    const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries LIMIT ?)',[LARGE_ROWS+1]);
-    const projected=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_catalog_projection LIMIT ?)',[LARGE_ROWS+1]);
-    check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=LARGE_ROWS&&projected?.n===count.n,'Catalog audit count or row limit');
-    const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes, coalesce(max(length(CAST(local_date AS BLOB))),0) AS dateBytes FROM fc_entries',[]);
-    check(['bytes','largest','idBytes','dateBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=LARGE_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36&&stat.dateBytes<=10,'Catalog audit byte limit');
-    const ps=await tx.get('SELECT coalesce(max(length(CAST(id AS BLOB))+length(CAST(name_key AS BLOB))+length(CAST(unit AS BLOB))+length(CAST(preparation AS BLOB))+length(CAST(status AS BLOB))),0) AS bytes FROM fc_catalog_projection',[]);
-    check(Number.isSafeInteger(ps?.bytes)&&ps.bytes>=0&&ps.bytes<=ROW_BYTES,'Catalog projection byte limit');
-    await verifyProjectionCoverage(tx);
-    let seen=0,used=0,cursor='';
-    while(seen<count.n){
-      const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
-      check(Array.isArray(rows)&&rows.length===Math.min(PAGE,count.n-seen),'Incomplete audit page');
-      for(const row of rows){const e=decode(row);check(e.id>cursor,'Invalid audit order');used+=bytes(row.payload);check(used<=LARGE_BYTES,'Catalog audit byte limit');await verifyProjectionRow(tx,e);cursor=e.id;seen++;}
-    }
-    check(seen===count.n&&used===stat.bytes,'Catalog audit snapshot mismatch');return {rows:seen,payloadBytes:used};
-  });}
+  async auditCatalog(){return this.#tx(auditProjection);}
   #tx(work){if(this.#closed)throw new Error('Storage closed');return this.#driver.transaction(work);}
   async close(){if(!this.#closing){this.#closed=true;this.#closing=Promise.resolve().then(()=>this.#driver.close());}return this.#closing;}
   // The journal contains only a sequence, operation kind and outcome, never food or goal payload.
