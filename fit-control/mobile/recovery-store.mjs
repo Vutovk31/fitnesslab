@@ -12,6 +12,7 @@ export function trackedDiaryStore(store){
     }
   }
   return {
+    ...(typeof store.findNutrition==='function'&&typeof store.selectNutrition==='function'?{findNutrition:query=>store.findNutrition(query),selectNutrition:(form,key,approved)=>store.selectNutrition(form,key,approved)}:{}),
     list:date=>store.list(date),getGoals:()=>store.getGoals(),exportBackup:version=>store.exportBackup(version),
     getRecovery:()=>store.getRecovery(),acknowledgeRecovery:(sequence,status,approved)=>store.acknowledgeRecovery(sequence,status,approved),
     create:entry=>tracked('create','create',[entry]),update:(entry,revision)=>tracked('update','update',[entry,revision]),

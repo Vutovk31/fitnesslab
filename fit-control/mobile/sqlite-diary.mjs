@@ -1,5 +1,6 @@
 import {validateEntry, DiaryConflict} from '../dist/storage.js';
 import {dayBalance} from '../dist/nutrition.js';
+import {matchNutrition,applyNutritionMatch} from './nutrition-matcher.mjs';
 
 // Driver owns an exclusive transaction until callback settles, commits only on
 // success, rolls back on failure, serializes callbacks on a connection, and
@@ -21,6 +22,8 @@ const GOAL_KEYS=['carbs_g','fat_g','kcal','protein_g'];
 const MAX_ROWS=1000, MAX_BYTES=2*1024*1024;
 // v3 is a bounded larger JSON snapshot, not a streaming file format.
 const LARGE_ROWS=20000, LARGE_BYTES=16*1024*1024, ROW_BYTES=64*1024, PAGE=64;
+// Catalog v1 refuses oversized history; never truncate into a false unique match.
+const CATALOG_ROWS=2000, CATALOG_BYTES=4*1024*1024;
 const utf8=new TextEncoder();
 const bytes=text=>utf8.encode(text).length;
 const SELECT = 'SELECT id,revision,local_date,payload FROM fc_entries';
@@ -158,6 +161,34 @@ export class SQLiteDiary {
     return {...old,revision:old.revision+1,status:'deleted',updated_at:updatedAt};
   },'remove',sequence);}
   async list(date){dayBalance([],date,null);return this.#tx(async tx=>(await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date])).map(decode));}
+  async #catalog(work){
+    return this.#tx(async tx=>{
+      const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries LIMIT ?)',[CATALOG_ROWS+1]);
+      check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=CATALOG_ROWS,'Catalog row limit or invalid count');
+      const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes, coalesce(max(length(CAST(local_date AS BLOB))),0) AS dateBytes FROM fc_entries',[]);
+      check(['bytes','largest','idBytes','dateBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=CATALOG_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36&&stat.dateBytes<=10,'Catalog byte limit or invalid metadata');
+      let cursor='',seen=0,used=0;const entries=[];
+      while(seen<count.n){
+        const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
+        check(Array.isArray(rows)&&rows.length===Math.min(PAGE,count.n-seen),'Incomplete catalog page');
+        for(const row of rows){
+          check(typeof row?.payload==='string'&&row.payload.length<=ROW_BYTES,'Invalid catalog payload');
+          const size=bytes(row.payload);used+=size;
+          check(size<=ROW_BYTES&&used<=CATALOG_BYTES,'Catalog byte limit');
+          const e=decode(row);check(e.id>cursor&&(e.status!=='deleted'||e.revision>=2),'Invalid catalog order or tombstone');
+          cursor=e.id;seen++;
+          if(e.status==='confirmed'||e.status==='planned')entries.push(e);
+        }
+      }
+      check(seen===count.n&&used===stat.bytes,'Catalog snapshot mismatch');
+      return work(entries);
+    });
+  }
+  async findNutrition(query){const q=structuredClone(query);return this.#catalog(entries=>matchNutrition(entries,q));}
+  async selectNutrition(form,key,approved=false){
+    check(approved===true&&typeof key==='string','Explicit catalog selection required');
+    const f=structuredClone(form);return this.#catalog(entries=>applyNutritionMatch(entries,f,key,true));
+  }
   async exportBackup(version=2){
     check(version===2||version===3,'Unsupported export version');
     return this.#tx(async tx=>{
