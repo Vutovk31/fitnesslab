@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "038-M03G3-SECURE-BACKUP-CENTER",
-  "status": "ENCRYPTED_BACKUP_UI_LOCAL_PASS_REAL_DATA_NATIVE_BUILD_BLOCKED",
+  "cycle": "039-M03G4-KEY-LIFECYCLE",
+  "status": "KEY_LIFECYCLE_POLICY_LOCAL_PASS_NATIVE_PRIVACY_BUILD_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M03G4",
-    "title": "Native key lifecycle and encrypted storage contract",
-    "scope": "Review tagged SQLite plugin key-management implementation and native storage boundaries; implement testable fail-closed key lifecycle decision contract (new install vs existing DB, missing key, wrong key, verification failure). No actual key provisioning or production gate opening without native evidence; no destructive migration/regeneration or plaintext fallback. Record OS backup exclusions and native acceptance. Keep file/password ports disabled in native path. After bounded contract work, prioritize independent voice/mobile features or authorized changed build environment. Preserve main/backup and automations.",
+    "id": "M06A",
+    "title": "Mobile voice diary — transcript and consent workflow",
+    "scope": "Return to independent user-facing mobile feature development under ALBR. Restore and inspect existing voice capture/transcript/diary source and tests at current HEAD before changes. Implement bounded mobile voice-diary first slice using explicit consent and synthetic/manual transcript input, deterministic parsing/preview, user confirmation and existing tracked diary writes; preserve validation and unknown nutrient semantics. No automatic AI writes, external upload, real microphone/STT or native claims without evidence. Native privacy, encrypted storage/provider, backup and build/device gates remain blocked; no blind SDK retry, main/backup or automation changes.",
     "acceptance": [
-      "Verified source-backed key lifecycle design and local fault tests",
-      "Missing/wrong key or unverified encryption blocks access; no silent destructive action",
-      "Real data gate remains closed until native validation; no invented native build/acceptance"
+      "Existing voice/transcript path reconciled to mobile diary, no duplicate implementation without source review",
+      "Local synthetic/manual transcript preview and explicitly approved tracked diary flow tested; cancellation/invalid input no mutation",
+      "No personal data/network transfer or false microphone/STT/native acceptance claim"
     ],
     "rollback": "Scoped source revert only; preserve user data and keys."
   },
@@ -57,22 +57,22 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M03G3_NODE_PASS_108_103_REGRESSION_5_NEW; REAL_WEBCRYPTO_LOCAL_SQLITE_MOCK_DOM_FILE_PASSPHRASE_PLUGIN_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
+    "runtime_tests": "M03G4_NODE_PASS_113_108_REGRESSION_5_NEW; POLICY_MATRIX_4096_COMBINATIONS; REAL_WEBCRYPTO_LOCAL_SQLITE_MOCK_DOM_FILE_PASSPHRASE_PLUGIN_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
     "native_toolchain": "BLOCKED unchanged: no SDK/Gradle/Xcode; documented BUILD_HANDOFF.md, no repeated install; dependency lock/bundle/build NOT_RUN",
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
-    "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB; encrypted backup UI local candidate; both native file/password ports disabled; native SQLCipher/key lifecycle, OS backup and device acceptance pending"
+    "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN"
   },
-  "parent_head": "02caa1aef440e7adcdb5f2ae829af28d0381896d",
+  "parent_head": "4e89bf77d80c741ae30c0ab2cc685a3e1979b52d",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE038.md",
-    "previous": "docs/fit-control/evidence/CYCLE037.md",
-    "test_count": 108,
-    "pass": 108,
+    "path": "docs/fit-control/evidence/CYCLE039.md",
+    "previous": "docs/fit-control/evidence/CYCLE038.md",
+    "test_count": 113,
+    "pass": 113,
     "fail": 0,
-    "scope": "Node 22.16.0 actual WebCrypto/local SQLite + mock DOM/file/passphrase/plugin ports; 103 regression (adapted backup tests) +5 new; native NOT_RUN",
+    "scope": "Node 22.16.0 decision matrix + actual local WebCrypto/SQLite + mock DOM/file/passphrase/plugin ports; 108 regression +5 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
       "mobile/diary-screen.mjs": "e2cd9bec7072d891e7bc1a268642b69e3a8298f1",
@@ -98,7 +98,9 @@
       "mobile/recovery-store.mjs": "7ce0a08be212c549ae5eaa1bddec0ccd55fa9a7e",
       "mobile/privacy-gate.mjs": "eda819735be0dcdfdcc2434a80ce652d3d5edede",
       "mobile/encrypted-backup.mjs": "7ec73865ea001c32c9e1581ad885ff276f51bfdd",
-      "tests/encrypted-backup.test.mjs": "ff0312f513bd7d9f189b856157d41ea53cb90590"
+      "tests/encrypted-backup.test.mjs": "ff0312f513bd7d9f189b856157d41ea53cb90590",
+      "mobile/key-lifecycle.mjs": "ec1eebd8b417d37b7a5607433c70ed2de769e5a8",
+      "tests/key-lifecycle.test.mjs": "8c40f3587fd63acd472d5724b7a139f5ce4c9335"
     },
     "browser": {
       "status": "NOT_RUN_BLOCKED",
