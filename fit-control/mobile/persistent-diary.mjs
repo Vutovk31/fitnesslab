@@ -3,14 +3,17 @@ import {diaryView} from '../dist/diary-view.js';
 import {DiaryConflict} from '../dist/storage.js';
 
 // Controller owns only a read projection. Store remains the source of truth.
-// Targets are session settings until durable preferences are implemented.
+// Optional legacy ports are read-only for goals; the native SQLite port persists them.
 export function persistentDiary({store,date,targets,idFactory,clock}) {
   for(const name of ['list','create','update','remove'])if(typeof store?.[name]!=='function')throw new TypeError('Unsupported diary store');
   if(typeof idFactory!=='function'||typeof clock!=='function')throw new TypeError('Missing identity or clock');
-  const goals=structuredClone(targets);diaryView([],date,goals);
+  let goals=structuredClone(targets);diaryView([],date,goals);
+  const durable=typeof store.getGoals==='function'&&typeof store.setGoals==='function';
+  if((typeof store.getGoals==='function')!==(typeof store.setGoals==='function'))throw new TypeError('Incomplete goals port');
+  let goalRevision=null;
   let rows=[],generation=0,busy=false;
   let state={date,phase:'idle',view:null,error:null};
-  const snapshot=()=>structuredClone({...state,busy});
+  const snapshot=()=>structuredClone({...state,busy,goals,goalRevision,durableGoals:durable});
   async function selectDate(next){
     diaryView([],next,goals);
     const token=++generation;
@@ -18,9 +21,12 @@ export function persistentDiary({store,date,targets,idFactory,clock}) {
     state={date:next,phase:'loading',view:previous,error:null};
     try{
       const data=structuredClone(await store.list(next));
+      const prefs=durable?structuredClone(await store.getGoals()):null;
       if(token!==generation)return false;
       if(data.some(e=>e.local_date!==next))throw new Error('Unexpected storage date');
-      const view=diaryView(data,next,goals);
+      if(prefs&&(!Number.isSafeInteger(prefs.revision)||prefs.revision<0))throw Error('Invalid goals revision');
+      const view=diaryView(data,next,prefs?prefs.targets:goals);
+      if(prefs){goals=prefs.targets;goalRevision=prefs.revision;}
       rows=data;state={date:next,phase:'ready',view,error:null};return true;
     }catch{
       if(token===generation){rows=[];state={date:next,phase:'error',view:previous,error:'READ_FAILED'};}
@@ -58,5 +64,14 @@ export function persistentDiary({store,date,targets,idFactory,clock}) {
     if(busy||state.phase!=='ready')throw new Error('Diary not ready or busy');
     return current(id,revision);
   }
-  return {snapshot,selectDate,save,remove,getEntry};
+  async function setGoals(targets,expectedRevision){
+    const value=structuredClone(targets);
+    return mutate(async()=>{
+      if(!durable)throw Error('Durable goals unavailable');
+      if(expectedRevision!==goalRevision)throw new DiaryConflict('Goal revision conflict');
+      diaryView([],state.date,value);
+      return store.setGoals(value,expectedRevision);
+    });
+  }
+  return {snapshot,selectDate,save,remove,getEntry,setGoals};
 }
