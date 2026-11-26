@@ -1,5 +1,7 @@
 // Mount the existing diary/editor markup in a mobile shell. No storage fallback.
 import {persistentDiary} from './persistent-diary.mjs';
+import {audioLease} from './audio-lease.mjs';
+import {mountRecognitionScreen} from './recognition-screen.mjs';
 import {mountCaptureScreen} from './voice-screen.mjs';
 import {transcriptForm} from '../preview/transcript.mjs';
 import {inspectBackup} from './sqlite-diary.mjs';
@@ -11,7 +13,7 @@ const statuses={confirmed:'Съедено',planned:'План',draft:'Черно�
 const fmt=n=>n===null?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(n);
 const decimal=n=>n===null?'':n.toLocaleString('en-US',{useGrouping:false,maximumSignificantDigits:21});
 const mounted=new WeakSet();
-export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve,filePort,passphrasePort,capturePort}){
+export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve,filePort,passphrasePort,capturePort,recognitionPort}){
   if(mounted.has(doc))throw new Error('Diary already mounted');
   if(typeof approve!=='function')throw new TypeError('Confirmation required');
   const c=persistentDiary({store,date,targets,idFactory,clock});
@@ -22,7 +24,8 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const backupEnabled=typeof filePort?.read==='function'&&typeof filePort?.write==='function'&&typeof passphrasePort?.request==='function'&&typeof store.exportBackup==='function'&&typeof store.restoreBackup==='function';
   const backupStatus=$('backup-status');
   backupStatus.textContent=backupEnabled?'Выберите действие.':'Файловый доступ не подключён.';
-  const voice=mountCaptureScreen(doc,{port:capturePort,approve});
+  const lease=audioLease();
+  const voice=mountCaptureScreen(doc,{port:capturePort,approve,lease});
   const day=$('day'),form=$('editor'),groups=$('groups'),error=$('error'),status=$('diary-status');
   const controls=Object.fromEntries(fields.map(k=>{const e=form.elements.namedItem(k);if(!e)throw new Error('Missing field '+k);return [k,e];}));
   const buttons=['save-confirm','save-plan','save-draft','save-edit','cancel','add'].map($);
@@ -40,13 +43,14 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   let transcriptCandidate=null;
   function invalidateTranscript(){transcriptCandidate=null;transcriptResult.textContent='';}
   function clearTranscript(){invalidateTranscript();transcriptText.value='';transcriptLine.value='1';}
+  const recognition=mountRecognitionScreen(doc,{port:recognitionPort,approve,lease,onAccept:text=>{clearTranscript();transcriptText.value=text;transcriptText.focus();render();}});
   const recoveryBlocked=()=>c.snapshot().recovery.status!=='none';
   function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy&&s.recovery.status==='none';
     const r=s.recovery,kind={create:'добавление',update:'изменение',remove:'удаление',goals:'цели',restore:'импорт'}[r.kind]??'';
     $('recovery-status').textContent=!s.recoveryEnabled?'Журнал не подключён.':r.status==='none'?'Незавершённых операций нет.':r.status==='unknown'?'Результат неизвестен. Обновите журнал или перезапустите приложение.':(r.status==='committed'?'Операция сохранена: ':'Операция не применена на момент проверки: ')+kind+'. Проверьте дневник и подтвердите результат.';
     $('recovery-ack').disabled=pending||uncertain||s.busy||s.phase!=='ready'||!['committed','not_applied'].includes(r.status);
     const canTranscript=ready&&!blocked&&!uncertain;
-    voice.sync(canTranscript);
+    voice.sync(canTranscript);recognition.sync(canTranscript);
     transcriptText.disabled=transcriptLine.disabled=$('transcript-preview').disabled=!canTranscript;
     $('transcript-apply').disabled=!canTranscript||!transcriptCandidate;
     $('transcript-clear').disabled=pending;
@@ -176,5 +180,5 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   $('retry-diary').addEventListener('click',()=>{if(pending||uncertain)return;if(blocked){if(!approve('Сбросить конфликтующую форму?'))return;reset();resetGoals();}return load(c.snapshot().date);});
   for(const id of ['cancel','add'])$(id).addEventListener('click',()=>{if(pending||(dirty&&!approve('Очистить несохранённую форму?')))return;reset();error.textContent='';render();if(id==='add')controls.name.focus();});
   for(const b of modes)b.addEventListener('click',()=>{if(pending||!['confirmed','planned','forecast'].includes(b.dataset.mode))return;mode=b.dataset.mode;render();});
-  mounted.add(doc);reset();render();$('main-content').removeAttribute('inert');$('connection-status').textContent=c.snapshot().durableGoals?'Подключено хранилище. Цели сохраняются локально.':'Подключено хранилище. Редактор целей недоступен.';const ready=load(date);return {ready,snapshot:c.snapshot,dispose:voice.dispose};
+  mounted.add(doc);reset();render();$('main-content').removeAttribute('inert');$('connection-status').textContent=c.snapshot().durableGoals?'Подключено хранилище. Цели сохраняются локально.':'Подключено хранилище. Редактор целей недоступен.';const ready=load(date);return {ready,snapshot:c.snapshot,dispose(){recognition.dispose();voice.dispose();clearTranscript();}};
 }
