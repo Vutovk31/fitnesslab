@@ -19,7 +19,8 @@ export async function startNativeDiary({capacitor,makeManager,doc,config,mount=m
     await connection.open();if((await connection.isDBOpen())?.result!==true)throw Error('Open not confirmed');
     const driver=nativeSQLiteDriver(connection,()=>manager.closeConnection(database,false));
     stage='SCHEMA';store=await SQLiteDiary.open(driver);
-    stage='UI';const ui=mount(doc,{...config,store});
+    const {targets}=await store.getGoals();
+    stage='UI';const ui=mount(doc,{...config,targets,store});
     if(await ui.ready!==true)throw Error('Initial read failed');
     let closing;
     return {status:'ready',close(){if(!closing){main.setAttribute('inert','');status.textContent='Хранилище закрывается.';closing=store.close();}return closing;}};

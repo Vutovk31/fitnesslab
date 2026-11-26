@@ -7,6 +7,8 @@ import {dayBalance} from '../dist/nutrition.js';
 // Native driver not included. SQL and values must be passed separately.
 const SCHEMA = 'CREATE TABLE fc_entries (id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), local_date TEXT NOT NULL, payload TEXT NOT NULL)';
 const INDEX = 'CREATE INDEX fc_entries_date ON fc_entries(local_date)';
+const GOALS = 'CREATE TABLE fc_goals (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), payload TEXT NOT NULL)';
+const GOAL_KEYS=['carbs_g','fat_g','kcal','protein_g'];
 const MAX_ROWS=1000, MAX_BYTES=2*1024*1024;
 const SELECT = 'SELECT id,revision,local_date,payload FROM fc_entries';
 function check(ok, message) { if (!ok) throw new RangeError(message); }
@@ -14,6 +16,22 @@ function decode(row) {
   const e=JSON.parse(row.payload);validateEntry(e);
   check(e.id===row.id && e.revision===row.revision && e.local_date===row.local_date,'Corrupt storage metadata');
   return e;
+}
+function validateGoals(value){
+  check(value && typeof value==='object' && !Array.isArray(value) && Object.keys(value).sort().join(',')===GOAL_KEYS.join(','),'Invalid goals shape');
+  for(const k of GOAL_KEYS)check(value[k]===null||(typeof value[k]==='number'&&Number.isFinite(value[k])&&value[k]>0),'Invalid goal');
+  return value;
+}
+function readGoals(row){
+  if(!row)return {revision:0,targets:{kcal:null,protein_g:null,fat_g:null,carbs_g:null}};
+  check(row.id===1&&Number.isSafeInteger(row.revision)&&row.revision>0,'Corrupt goals metadata');
+  return {revision:row.revision,targets:validateGoals(JSON.parse(row.payload))};
+}
+async function verifySchema(tx,version){
+  const objects=await tx.all("SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",[]);
+  const expected=[{type:'table',name:'fc_entries',sql:SCHEMA},{type:'index',name:'fc_entries_date',sql:INDEX}];
+  if(version===2)expected.push({type:'table',name:'fc_goals',sql:GOALS});
+  check(objects.length===expected.length&&expected.every((e,i)=>Object.keys(e).every(k=>objects[i][k]===e[k])),'Unexpected schema objects');
 }
 function assertChange(result) { if(result?.changes!==1) throw new DiaryConflict('Unexpected write count'); }
 function backupRows(text) {
@@ -41,10 +59,12 @@ export class SQLiteDiary {
         const tables=await tx.all("SELECT name FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",[]);
         check(tables.length===0,'Unrecognized database; migration refused');
         await tx.run(SCHEMA,[]);await tx.run(INDEX,[]);
-        await tx.run('PRAGMA user_version = 1',[]);
-      } else check(v===1,'Unsupported schema version');
-      const objects=await tx.all("SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",[]);
-      check(objects.length===2 && objects[0].type==='table' && objects[0].name==='fc_entries' && objects[0].sql===SCHEMA && objects[1].type==='index' && objects[1].name==='fc_entries_date' && objects[1].sql===INDEX,'Unexpected schema objects');
+      } else check(v===1||v===2,'Unsupported schema version');
+      if(v!==2){
+        await verifySchema(tx,1);await tx.run(GOALS,[]);await tx.run('PRAGMA user_version = 2',[]);
+      }
+      await verifySchema(tx,2);
+      readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
       await tx.all(SELECT+' LIMIT 0',[]);
     });
     return new SQLiteDiary(driver,openToken);
@@ -89,6 +109,18 @@ export class SQLiteDiary {
       if(n!==0)throw new DiaryConflict('Restore requires empty database');
       for(const e of entries)await insert(tx,e);
       return {restored:entries.length};
+    });
+  }
+  async getGoals(){return this.#tx(async tx=>readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])));}
+  async setGoals(targets,expectedRevision){
+    const value=validateGoals(structuredClone(targets));check(Number.isSafeInteger(expectedRevision)&&expectedRevision>=0&&expectedRevision<Number.MAX_SAFE_INTEGER,'Invalid goal revision');
+    return this.#tx(async tx=>{
+      const old=readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
+      if(old.revision!==expectedRevision)throw new DiaryConflict('Goal revision conflict');
+      const revision=expectedRevision+1,payload=JSON.stringify(value);
+      if(expectedRevision===0)assertChange(await tx.run('INSERT INTO fc_goals(id,revision,payload) VALUES(1,?,?)',[revision,payload]));
+      else assertChange(await tx.run('UPDATE fc_goals SET revision=?,payload=? WHERE id=1 AND revision=?',[revision,payload,expectedRevision]));
+      return {revision,targets:value};
     });
   }
   async balance(date,target){return dayBalance(await this.list(date),date,target);}
