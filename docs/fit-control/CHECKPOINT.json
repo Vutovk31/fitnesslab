@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "004-P0-02B-VERIFY",
-  "status": "P0_02B_HARDENED_BROWSER_ACCEPTANCE_BLOCKED",
+  "cycle": "005-P0-02B-VERIFY-HANDOFF",
+  "status": "P0_02B_PORTABLE_ACCEPTANCE_READY_BROWSER_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -43,18 +43,18 @@
   ],
   "next_action": {
     "id": "P0-02B-VERIFY",
-    "title": "Execute complete browser acceptance in an owner-authorized local environment",
+    "title": "Run portable acceptance bundle on an authorized host and return ACCEPTANCE_RESULT.json",
     "depends_on": [
       "P0-02A",
       "P0-02B implementation",
       "authorized browser environment"
     ],
-    "scope": "run existing hardened runner on the current pinned commit in an authorized normal browser installation; do not change managed policy, no new scheduler/workflow; fix only observed defects",
+    "scope": "Manual only. Use compiled bundle with pinned source commit, verify checksums, execute all existing browser scenarios; no policy bypass or external uploads.",
     "acceptance": [
-      "56 Node and 6 report-contract tests remain green",
-      "all 14 browser assertions pass with complete named report",
-      "transaction, concurrent revision, document reload and offline read/write verified",
-      "record actual SHA, browser version, exit code and results; then P0-02C"
+      "56 Node and 13 Python tests remain green",
+      "14 named actual browser cases pass",
+      "receipt contains matching source commit and checksums, browser version, exit code and full report",
+      "review receipt and then enable P0-02C"
     ],
     "rollback": "revert only scoped engineering commit if required; never delete diary data"
   },
@@ -63,34 +63,21 @@
     "native_ios": "requires Xcode/signing and physical device acceptance",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "NODE_PASS_56; REPORT_CONTRACT_PASS_6; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
+    "runtime_tests": "NODE_PASS_56; PYTHON_PASS_13; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
   },
-  "parent_head": "028b62d73e243fa1f33c7dfb08b90c218d77490b",
+  "parent_head": "901893e101c17ddd329262d242ab41242dec072a",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE004.md",
-    "previous": "docs/fit-control/evidence/CYCLE003.md",
-    "node": "22.16.0",
-    "npm": "10.9.2",
-    "typescript": "5.8.3",
-    "test_count": 62,
-    "pass": 62,
+    "path": "docs/fit-control/evidence/CYCLE005.md",
+    "previous": "docs/fit-control/evidence/CYCLE004.md",
+    "test_count": 69,
+    "pass": 69,
     "fail": 0,
-    "scope": "56 Node tests (51 previous + 5 Promise regressions), 6 Python report-contract tests; no actual IndexedDB execution",
-    "reproduction": {
-      "old_promise_tests": {
-        "pass": 0,
-        "fail": 5
-      },
-      "new_promise_tests": {
-        "pass": 5,
-        "fail": 0
-      }
-    },
+    "scope": "56 Node regression tests, 13 Python tests (6 report contract + 7 portable acceptance wrapper); no actual browser assertions",
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
       "pass": 0,
-      "reason": "Cycle003 navigation ERR_BLOCKED_BY_ADMINISTRATOR; current managed Chromium URLBlocklist=* confirmed; no policy change or repeated blocked navigation. No alternate authorized browser environment established. GitHub Actions runs returned zero; workflow listing endpoint unavailable."
+      "reason": "Same managed Chromium URLBlocklist=*; no policy change or blind retry. Authorized external host not available in session."
     },
     "tested_blobs": {
       "package.json": "54de87d454d5ad0d1f3359c9797a2916fed8bbbd",
@@ -106,7 +93,9 @@
       "tests/browser/run.py": "3cd0b9d6747b002330ce86d6606c197d5a362635",
       "tests/storage-promise.test.mjs": "c6c2e9e336e65f52e7be5ba1cc71e509f1324d2d",
       "tests/browser/report_contract.py": "3874e9b313792a981642e36ab2a30b1ca2e55225",
-      "tests/browser/test_report_contract.py": "7192b93e8367ff6e8c9a58ecb217bdba2d441003"
+      "tests/browser/test_report_contract.py": "7192b93e8367ff6e8c9a58ecb217bdba2d441003",
+      "tools/acceptance_bundle.py": "f8bb3a75a0cfe1276f06f2161f24bef11f1f0508",
+      "tests/browser/test_acceptance_bundle.py": "741256520ac715202645132ca6cb4bb87e9f9355"
     },
     "ci": "NOT_RUN"
   }
