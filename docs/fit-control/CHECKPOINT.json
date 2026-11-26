@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "005-P0-02B-VERIFY-HANDOFF",
-  "status": "P0_02B_PORTABLE_ACCEPTANCE_READY_BROWSER_BLOCKED",
+  "cycle": "006-P0-02C-PREP",
+  "status": "P0_02C_READ_MODEL_LOCAL_VERIFIED_STORAGE_GATE_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -43,41 +43,41 @@
   ],
   "next_action": {
     "id": "P0-02B-VERIFY",
-    "title": "Run portable acceptance bundle on an authorized host and return ACCEPTANCE_RESULT.json",
+    "title": "Review returned actual browser acceptance receipt, then P0-02C integration",
     "depends_on": [
-      "P0-02A",
-      "P0-02B implementation",
-      "authorized browser environment"
+      "owner-authorized browser execution"
     ],
-    "scope": "Manual only. Use compiled bundle with pinned source commit, verify checksums, execute all existing browser scenarios; no policy bypass or external uploads.",
+    "scope": "Review Cycle005 receipt against pinned code. Storage and its browser tests unchanged in Cycle006. If no receipt, independent P0-02C-PREP-FORM may implement pure form-to-entry validation and explicit status transitions; do not reopen test infrastructure work or close storage gate.",
     "acceptance": [
-      "56 Node and 13 Python tests remain green",
-      "14 named actual browser cases pass",
-      "receipt contains matching source commit and checksums, browser version, exit code and full report",
-      "review receipt and then enable P0-02C"
+      "14 named real browser cases pass with matched manifest",
+      "71 Node and 13 Python tests remain green",
+      "Only after acceptance wire adaptive UI to DiaryStore; actual browser E2E remains separate"
     ],
-    "rollback": "revert only scoped engineering commit if required; never delete diary data"
+    "rollback": "revert only scoped commit; no data deletion"
   },
   "gates": {
     "local_workspace_reconciliation": "UNKNOWN; before replacing legacy files",
     "native_ios": "requires Xcode/signing and physical device acceptance",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "NODE_PASS_56; PYTHON_PASS_13; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
+    "runtime_tests": "NODE_PASS_71; PYTHON_PASS_13; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
   },
-  "parent_head": "901893e101c17ddd329262d242ab41242dec072a",
+  "parent_head": "ec03fba083c3bc66e55ca7857347bb4afbdf4d47",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE005.md",
-    "previous": "docs/fit-control/evidence/CYCLE004.md",
-    "test_count": 69,
-    "pass": 69,
+    "path": "docs/fit-control/evidence/CYCLE006.md",
+    "previous": "docs/fit-control/evidence/CYCLE005.md",
+    "node": "22.16.0",
+    "npm": "10.9.2",
+    "typescript": "5.8.3",
+    "test_count": 84,
+    "pass": 84,
     "fail": 0,
-    "scope": "56 Node regression tests, 13 Python tests (6 report contract + 7 portable acceptance wrapper); no actual browser assertions",
+    "scope": "71 Node tests (56 prior + 15 diary read-model), 13 Python report/bundle tests; synthetic only",
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
       "pass": 0,
-      "reason": "Same managed Chromium URLBlocklist=*; no policy change or blind retry. Authorized external host not available in session."
+      "reason": "No matching ACCEPTANCE_RESULT.json in available files; no new authorized browser environment established; no repeat of blocked runner."
     },
     "tested_blobs": {
       "package.json": "54de87d454d5ad0d1f3359c9797a2916fed8bbbd",
@@ -95,7 +95,9 @@
       "tests/browser/report_contract.py": "3874e9b313792a981642e36ab2a30b1ca2e55225",
       "tests/browser/test_report_contract.py": "7192b93e8367ff6e8c9a58ecb217bdba2d441003",
       "tools/acceptance_bundle.py": "f8bb3a75a0cfe1276f06f2161f24bef11f1f0508",
-      "tests/browser/test_acceptance_bundle.py": "741256520ac715202645132ca6cb4bb87e9f9355"
+      "tests/browser/test_acceptance_bundle.py": "741256520ac715202645132ca6cb4bb87e9f9355",
+      "src/diary-view.ts": "7c42d9cd911853ceec07244d7d2d3868b1257a53",
+      "tests/diary-view.test.mjs": "5ee2947325f02fc93d394e89881aaf98574bbdd4"
     },
     "ci": "NOT_RUN"
   }
