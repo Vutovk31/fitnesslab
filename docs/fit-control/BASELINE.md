@@ -18,3 +18,27 @@ Only generic code, synthetic fixtures, redacted technical logs. No actual diary,
 
 ## Manual cycle
 Read checkpoint, verify current branch head and scope, take one next task, implement one reversible slice, run checks, record evidence and next action. If no test environment, label NOT_RUN. No recurring ChatGPT automation created. No changes to existing automations. Next: P0-02A.
+
+## Owner decision 2026-11-26 — mobile-first supersession (M01)
+Target is installable iPhone and Android applications, not a Windows desktop application. Owner accepted mobile-first migration and next-cycle development. MANUAL_ONLY remains in effect; all other project automations unchanged. Existing core, prototype, IndexedDB code and prior evidence preserved. The older "PWA first" priority and desktop acceptance as a prerequisite to mobile development are superseded; the IndexedDB gate is NOT_RUN_BLOCKED, not passed or deleted. If a PWA is shipped, its own browser gate remains mandatory. No mandatory Windows user action for mobile development.
+
+Architecture direction: reuse TypeScript domain and validation, mobile-first UI, Capacitor candidate shell, native SQLite candidate persistence. Choose and pin compatible dependencies and actual SDK/toolchain after verification; no dependency selected in M01. SQLite spike is isolated from runtime; metadata and payload must be reconstructed and checked by validateEntry, and domain transitions, transactions, migrations, durable backup and error mapping implemented before use. No raw SQL interpolation, no real data in fixtures, no silent network transfer, no sensitive logs. Prefer native app-private storage and platform protection, explicitly evaluate backup and deletion behavior. Existing HTML remains a synthetic preview only.
+
+### Mobile roadmap (supersedes earlier execution order, preserves feature scope)
+| ID | Dependency | Deliverable and acceptance |
+|---|---|---|
+| M01 P0 | existing baseline | Mobile architecture/acceptance decision, isolated SQLite feasibility, preserve historical evidence |
+| M02 P0 | M01 | Responsive mobile diary vertical slice; reusable domain, touch controls, safe-area, accessible labels, no fake persistence; verify real target UI later |
+| M03 P0 | M02 | Native storage adapter contract and SQLite implementation with validated records, atomic revision checks, transactional migrations, durable local data, unit and integration tests; no production claim |
+| M04 P0 | M03 | Pin compatible mobile dependencies; real Android project and build, iOS project and build/signing when authorized toolchain available; no paid account or publishing without consent |
+| M05 P0 | M04 | Physical Android and iPhone acceptance separately; storage and UI, offline, kill/relaunch, backup/restore; no desktop gate bypass claim |
+| M06 P1 | M05 | Voice capture, permission refusal, lifecycle, explicit transcript confirmation and optional supported recognition with manual fallback |
+| M07 P1 | M05 | Native WidgetKit and Glance, privacy-aware minimal versioned snapshot, stale time, deep link, real add-widget and refresh evidence |
+| M08 P1 | M05 | Local catalog, meal plan, shopping, training/reminders and manual GPT export; retain unknowns and consent, optional AI only after safe provider decision |
+| M09 P2 | M05 | Optional health integrations, explicit scoped consent, secure sync only if approved |
+| M10 P2 | M05–M09 as applicable | Release checklist, signing, target acceptance, owner approval; distribution and paid costs separate |
+
+### Mandatory native acceptance per platform
+1. create and correct nutrition totals; 2. duplicate rejected; 3. input snapshot isolation; 4. close/reopen with source/timezone; 5. planned/draft/confirmed and unknown vs zero; 6. edit and stale revision; 7. two writers atomic CAS; 8. rollback on failure; 9. tombstone/no resurrection; 10. invalid domain record rejected; 11. date isolation; 12. closed/unavailable storage failure surfaced; 13. force-stop/relaunch durability; 14. airplane-mode read/write/relaunch. Additionally migration/upgrade rollback, actual backup/restore, privacy, and responsive UI on each platform. Native microphone/widget gates separate. Each receipt identifies exact source SHA, artifact hash, platform/device/OS, versions, actual case results and limitations; no simulated test substitutes. Historical Cycle005 receipt may close only the old IndexedDB gate if valid. Native gates remain NOT_RUN until executed.
+
+Rollback: revert isolated M01 code/docs/checkpoint changes; preserve legacy source/evidence and never roll back user data destructively.
