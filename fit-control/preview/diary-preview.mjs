@@ -14,7 +14,24 @@ export function toForm(e) {
 }
 // Temporary UI state, not a persistence adapter or production store.
 export function createPreview({date,timezone,idFactory,clock,seed=true}) {
-  let rows=[];
+  let rows=[], goals={...targets};
+  function setTargets(input) {
+    const next={};
+    for(const k of Object.keys(targets)){
+      const raw=input[k];
+      if(typeof raw!=='string')throw new RangeError('Введите число или оставьте поле пустым');
+      const value=raw.trim();
+      if(!value){next[k]=null;continue;}
+      if(!/^\d+(?:[.,]\d+)?$/.test(value))throw new RangeError('Цель должна быть положительным числом');
+      const n=Number(value.replace(',','.'));
+      if(!Number.isFinite(n)||n<=0)throw new RangeError('Цель должна быть положительным конечным числом');
+      next[k]=n;
+    }
+    diaryView(rows,date,next);
+    goals=next;
+    return {...goals};
+  }
+  function getTargets(){return {...goals};}
   const find=id=>{const e=rows.find(r=>r.id===id);if(!e||e.status==='deleted')throw Error('Запись не найдена');return e;};
   function command(form,intent,id,revision) {
     const previous=id?find(id):undefined;
@@ -27,7 +44,7 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     const next={...c.entry,revision:id?c.entry.revision+1:1};
     const candidate=id?rows.map(r=>r.id===id?next:r):[...rows,next];
     // Reject aggregate overflow before changing temporary state.
-    diaryView(candidate,next.local_date,targets);
+    diaryView(candidate,next.local_date,goals);
     rows=candidate;
     return structuredClone(next);
   }
@@ -35,7 +52,7 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     const e=find(id);if(e.revision!==revision)throw Error('Запись изменилась. Откройте её заново.');
     rows=rows.filter(r=>r.id!==id);
   }
-  function view(day){return diaryView(rows,day,targets);}
+  function view(day){return diaryView(rows,day,goals);}
   function get(id){return structuredClone(find(id));}
   if(seed){
     const base=makeForm(date,timezone);
@@ -43,5 +60,5 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     apply({...base,name:'Творог (пример)',amount:'150',kcal:'120',protein_g:'16',fat_g:'5',carbs_g:'3'},'confirm');
     apply({...base,name:'Курица (пример)',meal_type:'lunch',amount:'200',kcal:'165',protein_g:'31',fat_g:'4',carbs_g:'0',preparation:'cooked'},'plan');
   }
-  return {command,apply,remove,view,get};
+  return {command,apply,remove,view,get,setTargets,getTargets};
 }

@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createPreview} from '../preview/diary-preview.mjs';
+import {dailyReport} from '../preview/daily-report.mjs';
+const date='2026-01-01';
+const setup=()=>{let n=0;return createPreview({date,timezone:'UTC',clock:()=>date+'T10:00:00.000Z',idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`});};
+const form=(overrides={})=>({kcal:'1000',protein_g:'50',fat_g:'40',carbs_g:'80',...overrides});
+test('explicit goals recompute balance, not food totals',()=>{const a=setup();a.setTargets(form());const c=a.view(date).cards.kcal;assert.equal(c.confirmed.total,378);assert.equal(c.target,1000);assert.equal(c.remaining,622);});
+test('blank goal is unknown; zero never silently accepted',()=>{const a=setup();a.setTargets(form({kcal:''}));const c=a.view(date).cards.kcal;assert.equal(c.target,null);assert.equal(c.remaining,null);assert.equal(c.progress,null);assert.throws(()=>a.setTargets(form({kcal:'0'})));});
+test('decimal comma and dot supported',()=>{const a=setup();a.setTargets(form({protein_g:'50,5',fat_g:'40.25'}));assert.equal(a.getTargets().protein_g,50.5);assert.equal(a.getTargets().fat_g,40.25);});
+test('invalid target leaves all previous targets unchanged',()=>{const a=setup(),before=a.getTargets();for(const kcal of ['-2','1e3','NaN','Infinity','9'.repeat(400),'0.'+'0'.repeat(400)+'1',undefined])assert.throws(()=>a.setTargets(form({kcal})));assert.deepEqual(a.getTargets(),before);});
+test('goals are session scoped, detached and shared across dates',()=>{const a=setup();a.setTargets(form());a.getTargets().kcal=999;assert.equal(a.view('2026-01-02').cards.kcal.target,1000);assert.equal(setup().getTargets().kcal,2100);});
+test('export reflects latest targets and preserves unknown',()=>{const a=setup();a.setTargets(form({protein_g:''}));const r=dailyReport(a.view(date));assert.equal(r.cards.kcal.target,1000);assert.equal(r.cards.protein_g.target,null);assert.equal(r.cards.protein_g.remaining_confirmed,null);});
