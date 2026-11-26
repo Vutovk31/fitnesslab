@@ -6,6 +6,8 @@ import {dayBalance} from '../dist/nutrition.js';
 // resolves only after commit. tx.run returns {changes}, tx.get/all return rows.
 // Native driver not included. SQL and values must be passed separately.
 const SCHEMA = 'CREATE TABLE fc_entries (id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), local_date TEXT NOT NULL, payload TEXT NOT NULL)';
+const INDEX = 'CREATE INDEX fc_entries_date ON fc_entries(local_date)';
+const MAX_ROWS=1000, MAX_BYTES=2*1024*1024;
 const SELECT = 'SELECT id,revision,local_date,payload FROM fc_entries';
 function check(ok, message) { if (!ok) throw new RangeError(message); }
 function decode(row) {
@@ -14,30 +16,46 @@ function decode(row) {
   return e;
 }
 function assertChange(result) { if(result?.changes!==1) throw new DiaryConflict('Unexpected write count'); }
+function backupRows(text) {
+  check(typeof text==='string' && text.length<=MAX_BYTES && new TextEncoder().encode(text).length<=MAX_BYTES,'Backup too large or invalid');
+  const b=JSON.parse(text);
+  check(b && typeof b==='object' && Object.keys(b).sort().join(',')==='entries,product,schema_version' && b.product==='FIT CONTROL' && b.schema_version===1 && Array.isArray(b.entries) && b.entries.length<=MAX_ROWS,'Unsupported backup');
+  const ids=new Set(), days=new Map();
+  for(const e of b.entries){
+    validateEntry(e);check(e.status!=='deleted'||e.revision>=2,'Invalid tombstone');check(!ids.has(e.id),'Duplicate backup id');ids.add(e.id);
+    if(!days.has(e.local_date))days.set(e.local_date,[]);days.get(e.local_date).push(e);
+  }
+  for(const [date,rows] of days)dayBalance(rows,date,null);
+  return b.entries;
+}
+const INSERT='INSERT INTO fc_entries(id,revision,local_date,payload) VALUES(?,?,?,?)';
+async function insert(tx,e){assertChange(await tx.run(INSERT,[e.id,e.revision,e.local_date,JSON.stringify(e)]));}
 export class SQLiteDiary {
-  #driver; #closed=false;
+  #driver; #closed=false; #closing;
   constructor(driver, token) { if(token!==openToken) throw new TypeError('Use SQLiteDiary.open');this.#driver=driver; }
   static async open(driver) {
     if(typeof driver?.transaction!=='function'||typeof driver?.close!=='function') throw new TypeError('Unsupported transaction driver');
     await driver.transaction(async tx=>{
       const {user_version:v}=await tx.get('PRAGMA user_version',[]);
       if(v===0){
-        const tables=await tx.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",[]);
+        const tables=await tx.all("SELECT name FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",[]);
         check(tables.length===0,'Unrecognized database; migration refused');
-        await tx.run(SCHEMA,[]);await tx.run('CREATE INDEX fc_entries_date ON fc_entries(local_date)',[]);
+        await tx.run(SCHEMA,[]);await tx.run(INDEX,[]);
         await tx.run('PRAGMA user_version = 1',[]);
       } else check(v===1,'Unsupported schema version');
+      const objects=await tx.all("SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",[]);
+      check(objects.length===2 && objects[0].type==='table' && objects[0].name==='fc_entries' && objects[0].sql===SCHEMA && objects[1].type==='index' && objects[1].name==='fc_entries_date' && objects[1].sql===INDEX,'Unexpected schema objects');
       await tx.all(SELECT+' LIMIT 0',[]);
     });
     return new SQLiteDiary(driver,openToken);
   }
   #tx(work){if(this.#closed)throw new Error('Storage closed');return this.#driver.transaction(work);}
-  async close(){if(!this.#closed){this.#closed=true;await this.#driver.close();}}
+  async close(){if(!this.#closing){this.#closed=true;this.#closing=Promise.resolve().then(()=>this.#driver.close());}return this.#closing;}
   async create(entry){
     const e=structuredClone(entry);validateEntry(e);check(e.revision===1&&e.status!=='deleted','Invalid initial entry');
     return this.#tx(async tx=>{
       if(await tx.get(SELECT+' WHERE id=?',[e.id]))throw new DiaryConflict('Duplicate id');
-      assertChange(await tx.run('INSERT INTO fc_entries(id,revision,local_date,payload) VALUES(?,?,?,?)',[e.id,e.revision,e.local_date,JSON.stringify(e)]));return e;
+      await insert(tx,e);return e;
     });
   }
   async #change(id,expected,transform){return this.#tx(async tx=>{
@@ -58,6 +76,21 @@ export class SQLiteDiary {
     return {...old,revision:old.revision+1,status:'deleted',updated_at:updatedAt};
   });}
   async list(date){dayBalance([],date,null);return this.#tx(async tx=>(await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date])).map(decode));}
+  async exportBackup(){return this.#tx(async tx=>{
+    const stat=await tx.get('SELECT count(*) AS n, coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_entries',[]);
+    check(stat.n<=MAX_ROWS && stat.bytes<=MAX_BYTES,'Backup too large');
+    const entries=(await tx.all(SELECT+' ORDER BY id',[])).map(decode);
+    const text=JSON.stringify({product:'FIT CONTROL',schema_version:1,entries});backupRows(text);return text;
+  });}
+  async restoreBackup(text,approved=false){
+    check(approved===true,'Explicit approval required');const entries=backupRows(text);
+    return this.#tx(async tx=>{
+      const {n}=await tx.get('SELECT count(*) AS n FROM fc_entries',[]);
+      if(n!==0)throw new DiaryConflict('Restore requires empty database');
+      for(const e of entries)await insert(tx,e);
+      return {restored:entries.length};
+    });
+  }
   async balance(date,target){return dayBalance(await this.list(date),date,target);}
 }
 const openToken=Symbol('open');
