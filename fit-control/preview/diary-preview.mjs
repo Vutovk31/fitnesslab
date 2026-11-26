@@ -64,8 +64,8 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     const b=inspectBackup(text);backupTextFor(b.entries,b.targets);rows=b.entries;goals=b.targets;
     return rows.length;
   }
-  function nextId(){
-    for(let i=0;i<=maxRecords;i++){const id=idFactory();if(!rows.some(r=>r.id===id))return id;}
+  function nextId(reserved=new Set()){
+    for(let i=0;i<=maxRecords;i++){const id=idFactory();if(!reserved.has(id)&&!rows.some(r=>r.id===id))return id;}
     throw new Error('Не удалось выделить уникальный идентификатор');
   }
   const find=id=>{const e=rows.find(r=>r.id===id);if(!e||e.status==='deleted')throw Error('Запись не найдена');return e;};
@@ -85,6 +85,20 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     backupTextFor(candidate,goals);
     rows=candidate;
     return structuredClone(next);
+  }
+  function mealPlan(forms,day,zone,meal,approved=false){
+    if(!Array.isArray(forms)||!forms.length||forms.length>30)throw new RangeError('Выберите от 1 до 30 продуктов');
+    if(rows.length+forms.length>maxRecords)throw new RangeError('Достигнут лимит записей');
+    const reserved=new Set(), stamp=clock();
+    const entries=forms.map(f=>{
+      const id=nextId(reserved);reserved.add(id);
+      return prepareEntry({...f,local_date:day,timezone:zone,meal_type:meal},'plan',{id,now:stamp}).entry;
+    });
+    const candidate=[...rows,...entries];
+    const mealView=diaryView(entries,day,goals), forecast=diaryView(candidate,day,goals);
+    backupTextFor(candidate,goals);
+    if(approved===true)rows=candidate;
+    return {meal:mealView,day:forecast,added:approved===true?entries.length:0};
   }
   function remove(id,revision) {
     const e=find(id);if(e.revision!==revision)throw Error('Запись изменилась. Откройте её заново.');
@@ -112,5 +126,5 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     apply({...base,name:'Творог (пример)',amount:'150',kcal:'120',protein_g:'16',fat_g:'5',carbs_g:'3'},'confirm');
     apply({...base,name:'Курица (пример)',meal_type:'lunch',amount:'200',kcal:'165',protein_g:'31',fat_g:'4',carbs_g:'0',preparation:'cooked'},'plan');
   }
-  return {command,apply,remove,view,get,setTargets,getTargets,inspectBackup,exportBackup,restoreBackup,catalog};
+  return {command,apply,remove,view,get,setTargets,getTargets,inspectBackup,exportBackup,restoreBackup,catalog,mealPlan};
 }
