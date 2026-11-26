@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "041-M06B-CAPTURE-CANDIDATE",
-  "status": "MOBILE_CAPTURE_UI_MOCK_LOCAL_PASS_NATIVE_MIC_BUILD_BLOCKED",
+  "cycle": "042-M06C1-OFFLINE-RECOGNITION",
+  "status": "OFFLINE_RECOGNITION_CONTRACT_LOCAL_PASS_NATIVE_STT_BUILD_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M06C1",
-    "title": "Offline speech recognition feasibility and result contract",
-    "scope": "Verify official current iOS/Android on-device STT APIs, offline constraints and permission/lifecycle guarantees. Implement first bounded local recognition-result contract/mock provider workflow with explicit consent, cancellation, stale-result rejection, no cloud fallback, explicit transcript review and no automatic diary write. Do not enable actual mic/provider without native privacy/build/device evidence. Reuse manual transcript path, preserve privacy gates, main/backup and automations; no blind SDK retry.",
+    "id": "M06C2",
+    "title": "Mobile recognition review integration",
+    "scope": "Connect synthetic offlineRecognition controller to mobile transcript review UI, explicit consent/approval, mutual exclusion of capture and recognition, cancellation/background/diary locks, stale result handling and manual transcript handoff. No automatic write or network. Native bootstrap strips provider; actual recognition/microphone/provider privacy/build gates remain blocked. Test actual local SQLite/mock DOM/provider. Preserve main/backup and automations; no blind SDK retry.",
     "acceptance": [
-      "Source-backed offline feasibility and clear unsupported-device behavior",
-      "Tested mock recognition result, cancellation/stale results and explicit transcript review; no writes/upload",
-      "Actual offline STT/native permissions/device acceptance separately NOT_RUN"
+      "Synthetic STT result enters manual transcript only after explicit review, no automatic diary write",
+      "Capture/recognition mutual exclusion and lifecycle/stale/cancel tests pass",
+      "Native provider disabled and actual offline STT/device acceptance separately NOT_RUN"
     ],
     "rollback": "Scoped source revert only; preserve user data and keys."
   },
@@ -57,23 +57,23 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M06B_NODE_PASS_131_125_REGRESSION_6_NEW; REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM_MEDIA_LIFECYCLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
+    "runtime_tests": "M06C1_NODE_PASS_137_131_REGRESSION_6_NEW; REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM_MEDIA_STT; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
     "native_toolchain": "BLOCKED unchanged: no SDK/Gradle/Xcode; documented BUILD_HANDOFF.md, no repeated install; dependency lock/bundle/build NOT_RUN",
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
     "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN",
-    "voice": "OPEN: manual transcript and synthetic capture wrapper local PASS; actual microphone/STT/native permission/lifecycle/recorder teardown and device acceptance NOT_RUN"
+    "voice": "OPEN: manual transcript, synthetic capture UI and synthetic offline recognition contract local PASS; recognition UI integration, native microphone/STT, actual ru-RU availability, permissions/network/lifecycle/device acceptance NOT_RUN"
   },
-  "parent_head": "b9ae327c22840a11ca00b252e36c6e99cd4071c7",
+  "parent_head": "85d58e6a22d7608d225c9d5a216f307cf56787ae",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE041.md",
-    "previous": "docs/fit-control/evidence/CYCLE040.md",
-    "test_count": 131,
-    "pass": 131,
+    "path": "docs/fit-control/evidence/CYCLE042.md",
+    "previous": "docs/fit-control/evidence/CYCLE041.md",
+    "test_count": 137,
+    "pass": 137,
     "fail": 0,
-    "scope": "Node 22.16.0 real local SQLite/WebCrypto + mock DOM/media/lifecycle/ports; 125 regression +6 new; native NOT_RUN",
+    "scope": "Node 22.16.0 real local SQLite/WebCrypto inherited + synthetic provider/clock/media/mock DOM; 131 regression +6 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
       "mobile/diary-screen.mjs": "6c4268aa1ca753d608e116ba2dc597ca3543b3c8",
@@ -107,10 +107,10 @@
       "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490",
       "mobile/voice-screen.mjs": "c332c569a03e2eff407c03fb70b2644a3527cb48",
       "tests/voice-screen.test.mjs": "d155ff5573399ae3638dbaa1c97e942e395ed818",
-      "preview/voice.mjs": "626514e7c3fd43bc318751bce4effb4f30f0f1b2"
+      "preview/voice.mjs": "626514e7c3fd43bc318751bce4effb4f30f0f1b2",
+      "mobile/offline-recognition.mjs": "96f10ed516843140f9dbf22bcc5d14b907eb6eaf",
+      "tests/offline-recognition.test.mjs": "1d9a14fc793657eb2593f7d43a89e97841618692"
     },
-    "shell_sha256": "2cef1eafad00fda12b666c829dbe061912824290ac4c4ae89cda67d5807be468",
-    "shell_bytes": 13586,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
