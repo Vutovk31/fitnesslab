@@ -54,5 +54,9 @@ export function persistentDiary({store,date,targets,idFactory,clock}) {
     });
   }
   async function remove(id,revision){return mutate(async()=>{current(id,revision);return store.remove(id,revision,clock());});}
-  return {snapshot,selectDate,save,remove};
+  function getEntry(id,revision){
+    if(busy||state.phase!=='ready')throw new Error('Diary not ready or busy');
+    return current(id,revision);
+  }
+  return {snapshot,selectDate,save,remove,getEntry};
 }
