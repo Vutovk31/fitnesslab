@@ -1,5 +1,6 @@
 // Mount the existing diary/editor markup in a mobile shell. No storage fallback.
 import {persistentDiary} from './persistent-diary.mjs';
+import {inspectBackup} from './sqlite-diary.mjs';
 const fields=['name','meal_type','preparation','amount','unit','basis_amount','basis_unit','kcal','protein_g','fat_g','carbs_g','source_kind','source_reference'];
 const blank={name:'',meal_type:'breakfast',preparation:'unknown',amount:'',unit:'g',basis_amount:'100',basis_unit:'g',kcal:'',protein_g:'',fat_g:'',carbs_g:'',source_kind:'estimate',source_reference:''};
 const meals={breakfast:'Завтрак',lunch:'Обед',snack:'Перекус',dinner:'Ужин',other:'Другое'};
@@ -7,11 +8,17 @@ const statuses={confirmed:'Съедено',planned:'План',draft:'Черно�
 const fmt=n=>n===null?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(n);
 const decimal=n=>n===null?'':n.toLocaleString('en-US',{useGrouping:false,maximumSignificantDigits:21});
 const mounted=new WeakSet();
-export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve}){
+export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,clock,approve,filePort}){
   if(mounted.has(doc))throw new Error('Diary already mounted');
   if(typeof approve!=='function')throw new TypeError('Confirmation required');
   const c=persistentDiary({store,date,targets,idFactory,clock});
   const $=id=>{const e=doc.getElementById(id);if(!e)throw new Error('Missing diary element '+id);return e;};
+  // Port contract: read({maxBytes}) returns immutable text or null (cancel),
+  // write({text,filename}) returns true only after completed local save, null on cancel.
+  // Native host must bound reads before allocating; no automatic upload/fallback.
+  const backupEnabled=typeof filePort?.read==='function'&&typeof filePort?.write==='function'&&typeof store.exportBackup==='function'&&typeof store.restoreBackup==='function';
+  const backupStatus=$('backup-status');
+  backupStatus.textContent=backupEnabled?'Выберите действие.':'Файловый доступ не подключён.';
   const day=$('day'),form=$('editor'),groups=$('groups'),error=$('error'),status=$('diary-status');
   const controls=Object.fromEntries(fields.map(k=>{const e=form.elements.namedItem(k);if(!e)throw new Error('Missing field '+k);return [k,e];}));
   const buttons=['save-confirm','save-plan','save-draft','save-edit','cancel','add'].map($);
@@ -35,6 +42,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     $('editor-heading').textContent=editing?'Редактировать продукт':'Добавить продукт';
     $('portion').textContent='Расчёт после подтверждения записи. Неизвестные значения оставьте пустыми.';
     $('retry-diary').disabled=pending||uncertain;
+    for(const id of ['backup-export','backup-import'])$(id).disabled=!ready||blocked||!backupEnabled;
     goalForm.setAttribute('aria-busy',String(pending));
     for(const k of goalKeys){goalFields[k].disabled=!ready||blocked||!s.durableGoals;if(!goalDirty)goalFields[k].value=s.phase==='ready'?decimal(s.goals[k]):'';}
     $('save-goals').disabled=!ready||blocked||!s.durableGoals;
@@ -64,6 +72,34 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     try{const result=await work();if(clear)reset();onCommit();status.textContent=result.refreshed?'Сохранено.':'Сохранено. Обновление не удалось — повторите чтение, не запись.';}
     catch{const code=c.snapshot().error;const conflict=code==='CONFLICT';uncertain=code==='COMMIT_OUTCOME_UNKNOWN';blocked=conflict||uncertain;if(uncertain){error.textContent='Исход сохранения неизвестен. Закройте приложение, откройте заново и проверьте запись до повторного ввода.';status.textContent='Требуется сверка базы.';return;}error.textContent=conflict?'Конфликт версий. Обновите дневник и заново выберите запись.':'Не сохранено. Проверьте поля или повторите позже.';status.textContent='Изменения не подтверждены.';}
     finally{pending=false;render();}}
+  async function backupAction(kind){
+    if(pending||blocked||!backupEnabled||c.snapshot().phase!=='ready')return;
+    if(kind==='export'&&approve('Экспорт незашифрованной копии сохранённых тестовых данных?')!==true)return;
+    pending=true;backupStatus.textContent='Подготовка…';render();
+    try{
+      if(kind==='export'){
+        const text=await store.exportBackup(3);
+        const saved=await filePort.write({text,filename:'FIT_CONTROL_backup_v3.json'});
+        if(saved!==true&&saved!==null)throw Error('Unconfirmed file write');
+        backupStatus.textContent=saved===true?'Файл сохранён.':'Экспорт отменён.';return;
+      }
+      const text=await filePort.read({maxBytes:16*1024*1024});
+      if(text===null){backupStatus.textContent='Выбор файла отменён.';return;}
+      const info=inspectBackup(text);
+      const summary='Формат v'+info.version+'; записей: '+info.entries+'; удалённых: '+info.deleted+'; цели: '+(info.hasGoals?'есть':'нет')+'. Только пустая база.';
+      backupStatus.textContent=summary;
+      if(approve(summary+' Восстановить? Несохранённые формы будут очищены только после коммита.')!==true){backupStatus.textContent='Восстановление отменено.';return;}
+      const result=await c.restoreBackup(text,true);
+      reset();resetGoals();
+      backupStatus.textContent=result.refreshed?'Восстановлено.':'Восстановлено. Обновление не удалось — повторите чтение, не импорт.';
+    }catch(e){
+      if(e?.code==='COMMIT_OUTCOME_UNKNOWN'){uncertain=true;blocked=true;backupStatus.textContent='Исход операции неизвестен. Закройте приложение, откройте заново и проверьте базу до повторного импорта.';}
+      else if(c.snapshot().error==='CONFLICT'){blocked=true;backupStatus.textContent='База не пуста. Восстановление запрещено.';}
+      else backupStatus.textContent=kind==='export'?'Сохранение файла не подтверждено.':'Восстановление не выполнено. Проверьте файл и состояние базы.';
+    }finally{pending=false;render();}
+  }
+  $('backup-export').addEventListener('click',()=>backupAction('export'));
+  $('backup-import').addEventListener('click',()=>backupAction('import'));
   goalForm.addEventListener('input',()=>{if(!goalDirty){goalBase=c.snapshot().goalRevision;goalDirty=true;}});
   goalForm.addEventListener('submit',ev=>{ev.preventDefault();if(pending||blocked||!c.snapshot().durableGoals)return;
     return write(()=>c.setGoals(Object.fromEntries(goalKeys.map(k=>[k,goalValue(goalFields[k].value)])),goalDirty?goalBase:c.snapshot().goalRevision),false,resetGoals);});

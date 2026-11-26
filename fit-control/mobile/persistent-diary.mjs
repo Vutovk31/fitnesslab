@@ -73,5 +73,8 @@ export function persistentDiary({store,date,targets,idFactory,clock}) {
       return store.setGoals(value,expectedRevision);
     });
   }
-  return {snapshot,selectDate,save,remove,getEntry,setGoals};
+  async function restoreBackup(text,approved){
+    return mutate(()=>store.restoreBackup(text,approved));
+  }
+  return {snapshot,selectDate,save,remove,getEntry,setGoals,restoreBackup};
 }

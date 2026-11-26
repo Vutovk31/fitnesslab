@@ -63,6 +63,10 @@ function backupRows(text) {
   for(const [date,rows] of days)dayBalance(rows,date,null);
   return {entries:b.entries,goals};
 }
+export function inspectBackup(text){
+  const {entries,goals}=backupRows(text);
+  return {version:JSON.parse(text).schema_version,entries:entries.length,deleted:entries.filter(e=>e.status==='deleted').length,hasGoals:goals.revision>0};
+}
 const INSERT='INSERT INTO fc_entries(id,revision,local_date,payload) VALUES(?,?,?,?)';
 async function insert(tx,e){assertChange(await tx.run(INSERT,[e.id,e.revision,e.local_date,JSON.stringify(e)]));}
 export class SQLiteDiary {
