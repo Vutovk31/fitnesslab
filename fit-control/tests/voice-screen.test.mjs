@@ -1,0 +1,17 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mountCaptureScreen} from '../mobile/voice-screen.mjs';
+function fixture({approve=()=>true,pending=false,enabled=true}={}){
+  const nodes=new Map();let requests=0,stops=0,foreground=true,listener,resolve,recorder,unsubscribed=0;
+  class E{constructor(){this.disabled=false;this.handlers={};this.textContent='';}addEventListener(k,f){this.handlers[k]=f;}click(){return this.handlers.click();}}
+  const get=id=>{if(!nodes.has(id))nodes.set(id,new E());return nodes.get(id);};
+  const stream={getTracks:()=>[{stop(){stops++;}}]};
+  const port={synthetic:true,media:{getUserMedia(){requests++;return pending?new Promise(r=>resolve=r):Promise.resolve(stream);}},Recorder:class{constructor(){recorder=this;this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.onstop?.();}data(blob=new Blob(['test'])){this.ondataavailable?.({data:blob});}},isForeground:()=>foreground,subscribe(f){listener=f;return ()=>{unsubscribed++;listener=null;};}};
+  const app=mountCaptureScreen({getElementById:get},{port:enabled?port:undefined,approve});app.sync(true);
+  return {app,get,port,click:k=>get('capture-'+k).click(),counts:()=>[requests,stops],rec:()=>recorder,resolve:()=>resolve(stream),background(){foreground=false;listener?.(false);},foreground(){foreground=true;listener?.(true);},unsubscribed:()=>unsubscribed};
+}
+test('absent adapter and denied consent do not request audio',async()=>{for(const options of [{enabled:false},{approve:()=>false}]){const f=fixture(options);await f.click('start');assert.deepEqual(f.counts(),[0,0]);f.app.dispose();}});
+test('explicit recording stop displays only size, clear drops recording',async()=>{const f=fixture();try{await f.click('start');await f.click('start');f.rec().data();f.click('stop');assert.deepEqual(f.counts(),[1,1]);assert.match(f.get('capture-status').textContent,/4 байт/);assert.equal(Object.hasOwn(f.app,'snapshot'),false);f.click('clear');assert.doesNotMatch(f.get('capture-status').textContent,/4 байт/);}finally{f.app.dispose();}});
+test('background cancels pending request and stops late stream, no automatic restart',async()=>{const f=fixture({pending:true});try{const p=f.click('start');f.background();f.foreground();assert.equal(f.get('capture-start').disabled,true);await f.click('start');f.background();f.resolve();await p;assert.deepEqual(f.counts(),[1,1]);assert.equal(f.get('capture-start').disabled,true);f.foreground();assert.equal(f.get('capture-start').disabled,false);assert.deepEqual(f.counts(),[1,1]);}finally{f.app.dispose();}});
+test('background or diary lock discards active capture and ignores stale recorder callbacks',async()=>{const f=fixture();try{await f.click('start');const r=f.rec();f.background();r.data();r.onstop();assert.deepEqual(f.counts(),[1,1]);f.foreground();await f.click('start');f.app.sync(false);assert.deepEqual(f.counts(),[2,2]);assert.equal(f.get('capture-start').disabled,true);}finally{f.app.dispose();}assert.equal(f.unsubscribed(),1);});
+test('oversized audio or recorder error releases tracks, no result',async()=>{const f=fixture();try{await f.click('start');f.rec().data(new Blob([new Uint8Array(16*1024*1024+1)]));assert.match(f.get('capture-status').textContent,/лимит/);assert.deepEqual(f.counts(),[1,1]);await f.click('start');f.rec().onerror();assert.match(f.get('capture-status').textContent,/Ошибка/);assert.deepEqual(f.counts(),[2,2]);}finally{f.app.dispose();}});
