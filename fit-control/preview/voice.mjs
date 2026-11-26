@@ -37,5 +37,10 @@ export function mountVoice(doc=globalThis.document, host=globalThis){
     if(s.blob!==previous){if(url)host.URL.revokeObjectURL(url);previous=s.blob;url=s.blob?host.URL.createObjectURL(s.blob):null;if(url){audio.src=url;download.href=url;const type=s.blob.type;download.download='fit-control-audio.'+(type.includes('mp4')?'m4a':type.includes('ogg')?'ogg':type.includes('webm')?'webm':'bin');}else{audio.removeAttribute('src');download.removeAttribute('href');}audio.hidden=download.hidden=!url;}}
   const capture=voiceCapture({media:host.navigator?.mediaDevices,Recorder:host.MediaRecorder,onChange:render});
   start.addEventListener('click',()=>capture.start());stop.addEventListener('click',()=>capture.stop());clear.addEventListener('click',()=>capture.discard());
-  const tick=host.setInterval(()=>render(capture.snapshot()),500);host.addEventListener('pagehide',()=>{capture.discard();host.clearInterval(tick);},{once:true});render(capture.snapshot());return capture;
+  let tick=null;
+  function startPolling(){if(tick===null)tick=host.setInterval(()=>render(capture.snapshot()),500);}
+  function stopPolling(){if(tick!==null){host.clearInterval(tick);tick=null;}}
+  host.addEventListener('pagehide',()=>{capture.discard();stopPolling();});
+  host.addEventListener('pageshow',()=>{startPolling();render(capture.snapshot());});
+  startPolling();render(capture.snapshot());return capture;
 }
