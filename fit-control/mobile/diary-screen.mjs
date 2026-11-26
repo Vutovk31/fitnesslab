@@ -1,5 +1,6 @@
 // Mount the existing diary/editor markup in a mobile shell. No storage fallback.
 import {persistentDiary} from './persistent-diary.mjs';
+import {transcriptForm} from '../preview/transcript.mjs';
 import {inspectBackup} from './sqlite-diary.mjs';
 import {encryptBackup,decryptBackup,encryptedBackupMaxBytes} from './encrypted-backup.mjs';
 const fields=['name','meal_type','preparation','amount','unit','basis_amount','basis_unit','kcal','protein_g','fat_g','carbs_g','source_kind','source_reference'];
@@ -33,11 +34,19 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const el=(tag,text)=>{const e=doc.createElement(tag);e.textContent=text;return e;};
   const action=(label,fn,disabled=false)=>{const b=el('button',label);b.type='button';b.disabled=disabled;b.addEventListener('click',fn);return b;};
   function reset(){editing=null;meta={};dirty=false;for(const k of fields)controls[k].value=blank[k];}
+  const transcriptText=$('transcript-text'),transcriptLine=$('transcript-line'),transcriptResult=$('transcript-result');
+  let transcriptCandidate=null;
+  function invalidateTranscript(){transcriptCandidate=null;transcriptResult.textContent='';}
+  function clearTranscript(){invalidateTranscript();transcriptText.value='';transcriptLine.value='1';}
   const recoveryBlocked=()=>c.snapshot().recovery.status!=='none';
   function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy&&s.recovery.status==='none';
     const r=s.recovery,kind={create:'добавление',update:'изменение',remove:'удаление',goals:'цели',restore:'импорт'}[r.kind]??'';
     $('recovery-status').textContent=!s.recoveryEnabled?'Журнал не подключён.':r.status==='none'?'Незавершённых операций нет.':r.status==='unknown'?'Результат неизвестен. Обновите журнал или перезапустите приложение.':(r.status==='committed'?'Операция сохранена: ':'Операция не применена на момент проверки: ')+kind+'. Проверьте дневник и подтвердите результат.';
     $('recovery-ack').disabled=pending||uncertain||s.busy||s.phase!=='ready'||!['committed','not_applied'].includes(r.status);
+    const canTranscript=ready&&!blocked&&!uncertain;
+    transcriptText.disabled=transcriptLine.disabled=$('transcript-preview').disabled=!canTranscript;
+    $('transcript-apply').disabled=!canTranscript||!transcriptCandidate;
+    $('transcript-clear').disabled=pending;
     day.value=s.date;day.disabled=pending||uncertain;form.setAttribute('aria-busy',String(pending));
     for(const e of Object.values(controls))e.disabled=!ready;
     for(const b of buttons)b.disabled=!ready||blocked;
@@ -107,7 +116,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
       if(approve(summary+' Восстановить? Несохранённые формы будут очищены только после коммита.')!==true){backupStatus.textContent='Восстановление отменено.';return;}
       restoring=true;
       const result=await c.restoreBackup(text,true);
-      reset();resetGoals();
+      reset();resetGoals();clearTranscript();
       backupStatus.textContent=result.refreshed?'Восстановлено.':'Восстановлено. Обновление не удалось — повторите чтение, не импорт.';
     }catch(e){
       if(restoring&&e?.code==='COMMIT_OUTCOME_UNKNOWN'){uncertain=true;blocked=true;backupStatus.textContent='Исход операции неизвестен. Закройте приложение, откройте заново и проверьте базу до повторного импорта.';}
@@ -115,13 +124,38 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
       else backupStatus.textContent=kind==='export'?'Сохранение файла не подтверждено.':'Восстановление не выполнено. Проверьте пароль, файл и состояние базы.';
     }finally{pending=false;render();}
   }
+  const canPrepareTranscript=()=>!pending&&!blocked&&!uncertain&&!recoveryBlocked()&&c.snapshot().phase==='ready';
+  for(const e of [transcriptText,transcriptLine])e.addEventListener('input',()=>{invalidateTranscript();render();});
+  $('transcript-clear').addEventListener('click',()=>{if(pending)return;clearTranscript();render();});
+  $('transcript-preview').addEventListener('click',()=>{
+    if(!canPrepareTranscript())return;
+    invalidateTranscript();
+    if(approve('Обработать тестовую расшифровку локально, без отправки данных?')!==true){render();return;}
+    try{
+      if(!/^\d+$/.test(transcriptLine.value))throw Error('Invalid line');
+      const text=transcriptText.value,line=transcriptLine.value,date=c.snapshot().date;
+      const candidate=transcriptForm(text,Number(line),date,timezone);
+      transcriptCandidate={text,line,date,form:candidate};
+      transcriptResult.textContent=candidate.name+' · '+(candidate.amount?candidate.amount+' '+({g:'г',ml:'мл',piece:'шт.'}[candidate.unit]):'уточните количество')+' · КБЖУ не определены. Проверьте приём пищи (по умолчанию завтрак).';
+    }catch{transcriptResult.textContent='Некорректная строка. Используйте формат «Продукт; 150 г» или укажите название.';}
+    render();
+  });
+  $('transcript-apply').addEventListener('click',()=>{
+    if(!canPrepareTranscript()||!transcriptCandidate)return;
+    const p=transcriptCandidate;
+    if(p.text!==transcriptText.value||p.line!==transcriptLine.value||p.date!==c.snapshot().date){invalidateTranscript();render();return;}
+    if(approve('Перенести строку в редактор? '+(dirty||editing?'Текущая несохранённая форма будет заменена. ':'')+'Запись не сохранится без отдельного действия.')!==true)return;
+    reset();for(const k of fields)controls[k].value=p.form[k]??'';dirty=true;
+    clearTranscript();transcriptResult.textContent='Перенесено в редактор. Уточните данные и выберите действие сохранения.';
+    error.textContent='';render();controls.name.focus();
+  });
   $('backup-export').addEventListener('click',()=>backupAction('export'));
   $('backup-import').addEventListener('click',()=>backupAction('import'));
   $('recovery-ack').addEventListener('click',async()=>{
     const s=c.snapshot(),r=s.recovery;
     if(pending||uncertain||s.phase!=='ready'||!['committed','not_applied'].includes(r.status)||approve('Подтвердить проверенный результат? Несохранённые формы будут сброшены. Операция не будет повторена.')!==true)return;
     pending=true;render();
-    try{const ok=await c.acknowledgeRecovery(r.sequence,r.status,true);reset();resetGoals();blocked=false;error.textContent='';status.textContent=ok?'Результат подтверждён.':'Результат подтверждён, требуется обновление.';}
+    try{const ok=await c.acknowledgeRecovery(r.sequence,r.status,true);reset();resetGoals();clearTranscript();blocked=false;error.textContent='';status.textContent=ok?'Результат подтверждён.':'Результат подтверждён, требуется обновление.';}
     catch{error.textContent='Подтверждение не завершено. Обновите журнал; не повторяйте операцию.';}
     finally{pending=false;render();}
   });
@@ -135,7 +169,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     if(editing?.status==='confirmed'&&intent!=='edit')return;
     const f={...meta,local_date:c.snapshot().date,timezone:meta.timezone??timezone};for(const k of fields)f[k]=controls[k].value;
     return write(()=>c.save(f,intent,editing),true);});
-  day.addEventListener('change',()=>{const next=day.value;if(pending||uncertain){render();return;}if((dirty||editing)&&!approve('Отменить несохранённую форму?')){render();return;}reset();return load(next);});
+  day.addEventListener('change',()=>{const next=day.value;if(pending||uncertain){render();return;}if((dirty||editing)&&!approve('Отменить несохранённую форму?')){render();return;}reset();clearTranscript();return load(next);});
   $('retry-diary').addEventListener('click',()=>{if(pending||uncertain)return;if(blocked){if(!approve('Сбросить конфликтующую форму?'))return;reset();resetGoals();}return load(c.snapshot().date);});
   for(const id of ['cancel','add'])$(id).addEventListener('click',()=>{if(pending||(dirty&&!approve('Очистить несохранённую форму?')))return;reset();error.textContent='';render();if(id==='add')controls.name.focus();});
   for(const b of modes)b.addEventListener('click',()=>{if(pending||!['confirmed','planned','forecast'].includes(b.dataset.mode))return;mode=b.dataset.mode;render();});

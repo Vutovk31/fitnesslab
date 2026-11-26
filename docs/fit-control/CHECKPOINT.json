@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "039-M03G4-KEY-LIFECYCLE",
-  "status": "KEY_LIFECYCLE_POLICY_LOCAL_PASS_NATIVE_PRIVACY_BUILD_BLOCKED",
+  "cycle": "040-M06A-MANUAL-TRANSCRIPT",
+  "status": "MOBILE_TRANSCRIPT_LOCAL_PASS_MIC_NATIVE_BUILD_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M06A",
-    "title": "Mobile voice diary — transcript and consent workflow",
-    "scope": "Return to independent user-facing mobile feature development under ALBR. Restore and inspect existing voice capture/transcript/diary source and tests at current HEAD before changes. Implement bounded mobile voice-diary first slice using explicit consent and synthetic/manual transcript input, deterministic parsing/preview, user confirmation and existing tracked diary writes; preserve validation and unknown nutrient semantics. No automatic AI writes, external upload, real microphone/STT or native claims without evidence. Native privacy, encrypted storage/provider, backup and build/device gates remain blocked; no blind SDK retry, main/backup or automation changes.",
+    "id": "M06B",
+    "title": "Consent-bound mobile audio capture candidate",
+    "scope": "Review existing preview/voice.mjs and voice lifecycle tests; reuse bounded capture engine where safe. Implement mobile capture UI candidate with explicit consent, injected media/recorder/lifecycle host, cancellation/background/error resource release and no audio persistence, export, recognition or upload. Keep manual transcript path; no real mic permission/STT/native claims. Real-data gate closed; no blind SDK retry, main/backup or automation changes.",
     "acceptance": [
-      "Existing voice/transcript path reconciled to mobile diary, no duplicate implementation without source review",
-      "Local synthetic/manual transcript preview and explicitly approved tracked diary flow tested; cancellation/invalid input no mutation",
-      "No personal data/network transfer or false microphone/STT/native acceptance claim"
+      "Explicit consent before capture; bounded recording and release on cancel/error/background verified with mocks",
+      "No audio persistence/network or silent diary writes; manual transcript remains available",
+      "Actual microphone/native lifecycle/OS permission and device acceptance separate"
     ],
     "rollback": "Scoped source revert only; preserve user data and keys."
   },
@@ -57,27 +57,28 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M03G4_NODE_PASS_113_108_REGRESSION_5_NEW; POLICY_MATRIX_4096_COMBINATIONS; REAL_WEBCRYPTO_LOCAL_SQLITE_MOCK_DOM_FILE_PASSPHRASE_PLUGIN_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
+    "runtime_tests": "M06A_NODE_PASS_125_113_REGRESSION_7_RESTORED_LEGACY_5_NEW; REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
     "native_toolchain": "BLOCKED unchanged: no SDK/Gradle/Xcode; documented BUILD_HANDOFF.md, no repeated install; dependency lock/bundle/build NOT_RUN",
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
-    "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN"
+    "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN",
+    "voice": "OPEN: manual selected-line transcript flow local PASS; actual capture/STT/native permissions and lifecycle NOT_RUN"
   },
-  "parent_head": "4e89bf77d80c741ae30c0ab2cc685a3e1979b52d",
+  "parent_head": "aa351738c37762261394a37f4c448443ad63610b",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE039.md",
-    "previous": "docs/fit-control/evidence/CYCLE038.md",
-    "test_count": 113,
-    "pass": 113,
+    "path": "docs/fit-control/evidence/CYCLE040.md",
+    "previous": "docs/fit-control/evidence/CYCLE039.md",
+    "test_count": 125,
+    "pass": 125,
     "fail": 0,
-    "scope": "Node 22.16.0 decision matrix + actual local WebCrypto/SQLite + mock DOM/file/passphrase/plugin ports; 108 regression +5 new; native NOT_RUN",
+    "scope": "Node 22.16.0 real local SQLite/WebCrypto + mock DOM/ports; 113 regression +7 restored legacy transcript tests +5 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
-      "mobile/diary-screen.mjs": "e2cd9bec7072d891e7bc1a268642b69e3a8298f1",
-      "mobile/build-diary-shell.mjs": "57981e2761b24257b6ed994afcb770339c653b54",
-      "tests/diary-screen.test.mjs": "99175d799126c67e5fbdb3d8e4fd33dfe5d213d2",
+      "mobile/diary-screen.mjs": "da6358605c48ba05124fcb3b239ace24163646a7",
+      "mobile/build-diary-shell.mjs": "ffbce484d799a754d7f87fa4a366ff0a26976411",
+      "tests/diary-screen.test.mjs": "77a50c5d534748be2c3cb74660f7a4da512089c5",
       "tests/persistent-diary.test.mjs": "9de45e683c6adf3ebb780e37a9c43b1c069ac009",
       "mobile/sqlite-diary.mjs": "123fcd4e0aab331f1723accd531dc72d1a75d391",
       "tests/sqlite-diary.test.mjs": "508b81b9de12a02e215c62dba52aa09de0c8413d",
@@ -100,8 +101,13 @@
       "mobile/encrypted-backup.mjs": "7ec73865ea001c32c9e1581ad885ff276f51bfdd",
       "tests/encrypted-backup.test.mjs": "ff0312f513bd7d9f189b856157d41ea53cb90590",
       "mobile/key-lifecycle.mjs": "ec1eebd8b417d37b7a5607433c70ed2de769e5a8",
-      "tests/key-lifecycle.test.mjs": "8c40f3587fd63acd472d5724b7a139f5ce4c9335"
+      "tests/key-lifecycle.test.mjs": "8c40f3587fd63acd472d5724b7a139f5ce4c9335",
+      "preview/diary-preview.mjs": "7486226249d74934002cfdb43a33296b338b9c83",
+      "preview/transcript.mjs": "86e9205db6c73bd3cf9d56bcc3d286c5855c9cf3",
+      "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490"
     },
+    "shell_sha256": "f46ab06b879f3aac2f18548cdefa94e8e17cb8ffad7dc749ea7f44093da04bd9",
+    "shell_bytes": 12941,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
