@@ -121,6 +121,45 @@ export class SQLiteDiary {
     });
     return new SQLiteDiary(driver,openToken);
   }
+  // Explicit read-only legacy recovery candidate; never opens/migrates the diary.
+  static async inspectLegacyDay(driver,date,approved=false){
+    check(approved===true,'Explicit legacy recovery approval required');dayBalance([],date,null);
+    return driver.transaction(async tx=>{
+      check((await tx.get('PRAGMA user_version',[]))?.user_version===3,'Expected legacy schema v3');
+      await verifySchema(tx,3);
+      const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries WHERE local_date=? LIMIT ?)',[date,CATALOG_ROWS+1]);
+      check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=CATALOG_ROWS,'Legacy day row limit');
+      const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes FROM fc_entries WHERE local_date=?',[date]);
+      check(['bytes','largest','idBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=CATALOG_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36,'Legacy day byte limit');
+      const rows=await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date]);
+      check(rows.length===count.n,'Legacy day count mismatch');let used=0,cursor='';
+      const entries=rows.map(row=>{const e=decode(row);used+=bytes(row.payload);check(e.local_date===date&&e.id>cursor&&(e.status!=='deleted'||e.revision>=2),'Invalid legacy day row');cursor=e.id;return e;});
+      check(used===stat.bytes,'Legacy day byte mismatch');
+      const goalSize=await tx.get('SELECT coalesce(max(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
+      check(Number.isSafeInteger(goalSize?.bytes)&&goalSize.bytes>=0&&goalSize.bytes<=ROW_BYTES,'Legacy goals byte limit');
+      return {date,entries,goals:readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])),recovery:recoveryView(recoveryRow(await tx.get(RECOVERY_SELECT,[])))};
+    });
+  }
+  // Full bounded audit only. Never repair or issue an indexed-read authorization.
+  async auditCatalog(){return this.#tx(async tx=>{
+    await verifySchema(tx,4);
+    check((await tx.get('PRAGMA user_version',[]))?.user_version===4,'Expected schema v4');
+    const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries LIMIT ?)',[LARGE_ROWS+1]);
+    const projected=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_catalog_projection LIMIT ?)',[LARGE_ROWS+1]);
+    check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=LARGE_ROWS&&projected?.n===count.n,'Catalog audit count or row limit');
+    const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes, coalesce(max(length(CAST(local_date AS BLOB))),0) AS dateBytes FROM fc_entries',[]);
+    check(['bytes','largest','idBytes','dateBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=LARGE_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36&&stat.dateBytes<=10,'Catalog audit byte limit');
+    const ps=await tx.get('SELECT coalesce(max(length(CAST(id AS BLOB))+length(CAST(name_key AS BLOB))+length(CAST(unit AS BLOB))+length(CAST(preparation AS BLOB))+length(CAST(status AS BLOB))),0) AS bytes FROM fc_catalog_projection',[]);
+    check(Number.isSafeInteger(ps?.bytes)&&ps.bytes>=0&&ps.bytes<=ROW_BYTES,'Catalog projection byte limit');
+    await verifyProjectionCoverage(tx);
+    let seen=0,used=0,cursor='';
+    while(seen<count.n){
+      const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
+      check(Array.isArray(rows)&&rows.length===Math.min(PAGE,count.n-seen),'Incomplete audit page');
+      for(const row of rows){const e=decode(row);check(e.id>cursor,'Invalid audit order');used+=bytes(row.payload);check(used<=LARGE_BYTES,'Catalog audit byte limit');await verifyProjectionRow(tx,e);cursor=e.id;seen++;}
+    }
+    check(seen===count.n&&used===stat.bytes,'Catalog audit snapshot mismatch');return {rows:seen,payloadBytes:used};
+  });}
   #tx(work){if(this.#closed)throw new Error('Storage closed');return this.#driver.transaction(work);}
   async close(){if(!this.#closing){this.#closed=true;this.#closing=Promise.resolve().then(()=>this.#driver.close());}return this.#closing;}
   // The journal contains only a sequence, operation kind and outcome, never food or goal payload.
