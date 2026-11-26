@@ -2,15 +2,17 @@ import {nativeSQLiteDriver} from './native-sqlite-driver.mjs';
 import {SQLiteDiary} from './sqlite-diary.mjs';
 import {trackedDiaryStore} from './recovery-store.mjs';
 import {mountDiaryScreen} from './diary-screen.mjs';
-const database='fit_control_diary_v1', attempted=new WeakSet();
+import {SYNTHETIC_DATABASE as database,authorizeSynthetic} from './privacy-gate.mjs';
+const attempted=new WeakSet();
 // Native-only synthetic acceptance candidate. No automatic fallback or retry.
-export async function startNativeDiary({capacitor,makeManager,doc,config,mount=mountDiaryScreen}){
+export async function startNativeDiary({capacitor,makeManager,doc,config,privacyMode,mount=mountDiaryScreen}){
   const main=doc.getElementById('main-content'),status=doc.getElementById('connection-status');
   if(!main||!status||attempted.has(doc))throw Error('Invalid or previously started shell');
   attempted.add(doc);main.setAttribute('inert','');
   let manager,owned=false,store,stage='PLATFORM';
   try{
     if(capacitor?.isNativePlatform()!==true||!['android','ios'].includes(capacitor.getPlatform())||capacitor.isPluginAvailable('CapacitorSQLite')!==true)throw Error('Unsupported platform');
+    stage='PRIVACY';if(!authorizeSynthetic(privacyMode,config?.approve))throw Error('Synthetic acceptance not authorized');
     stage='CONNECTION';manager=makeManager();
     for(const k of ['isConnection','createConnection','closeConnection'])if(typeof manager?.[k]!=='function')throw Error('Unsupported manager');
     const exists=await manager.isConnection(database,false);
@@ -21,7 +23,7 @@ export async function startNativeDiary({capacitor,makeManager,doc,config,mount=m
     const driver=nativeSQLiteDriver(connection,()=>manager.closeConnection(database,false));
     stage='SCHEMA';store=await SQLiteDiary.open(driver);
     const {targets}=await store.getGoals();
-    stage='UI';const ui=mount(doc,{...config,targets,store:trackedDiaryStore(store)});
+    stage='UI';const ui=mount(doc,{...config,targets,store:trackedDiaryStore(store),filePort:undefined});
     if(await ui.ready!==true)throw Error('Initial read failed');
     let closing;
     return {status:'ready',close(){if(!closing){main.setAttribute('inert','');status.textContent='Хранилище закрывается.';closing=store.close();}return closing;}};

@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "035-M03F2-RECOVERY-INTEGRATION",
-  "status": "RECOVERY_INTEGRATED_LOCAL_PASS_NATIVE_BUILD_BLOCKED",
+  "cycle": "036-M03G1-PRIVACY-GATE",
+  "status": "PRIVACY_GATE_LOCAL_PASS_REAL_DATA_NATIVE_BUILD_BLOCKED",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,37 +42,37 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M03G1",
-    "title": "Privacy and encrypted storage release gate",
-    "scope": "Review native privacy boundaries, key lifecycle, backup/file confidentiality and app-private storage. Implement first testable fail-closed privacy slice and explicit synthetic-only/test mode where safe; no real health data, no unverified encryption claim or destructive key migration. Verify local tests; actual native key storage, build and device acceptance separate. Preserve main/backup and automations; no blind SDK retry.",
+    "id": "M03G2",
+    "title": "Authenticated encrypted portable backup envelope",
+    "scope": "Implement bounded versioned authenticated backup encryption/decryption with standard WebCrypto, explicit passphrase, random salt/nonce, pinned bounded KDF parameters and authenticated metadata, validate existing backup after decryption. Test tampering, wrong password, malformed/oversized inputs, actual local SQLite restore and no mutation on failure. Keep file port and real-data gate closed until native privacy acceptance; no native DB encryption claim. Preserve main/backup and automations; no blind SDK retry.",
     "acceptance": [
-      "Explicit privacy gate and no silent transfer/fallback for sensitive data",
-      "Tested first implementation or verified blocker and actionable native key/backup design",
-      "No production or native encryption claim without actual evidence"
+      "Authenticated roundtrip and fail-closed invalid/tampered/wrong-passphrase tests",
+      "No implicit plaintext downgrade, password persistence or network transfer",
+      "Actual local evidence; native key storage, file flow, build and device acceptance separate"
     ],
-    "rollback": "Scoped source revert only; preserve user data and never destructively downgrade."
+    "rollback": "Scoped source revert only; preserve user data and no destructive downgrade."
   },
   "gates": {
     "local_workspace_reconciliation": "UNKNOWN; before replacing legacy files",
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M03F2_NODE_PASS_91_85_REGRESSION_6_NEW; REAL_LOCAL_SQLITE_MOCK_DOM_FILE_PORT_PLUGIN_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
+    "runtime_tests": "M03G1_NODE_PASS_96_91_REGRESSION_5_NEW; REAL_LOCAL_SQLITE_MOCK_DOM_FILE_PORT_PLUGIN_DOUBLE; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: v3 bounded backup and UI tested locally with mock file port; native port absent/disabled, encryption/privacy, full bounds/heap/native performance and streaming beyond cap pending",
     "native_toolchain": "BLOCKED unchanged: no SDK/Gradle/Xcode; documented BUILD_HANDOFF.md, no repeated install; dependency lock/bundle/build NOT_RUN",
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
-    "native_privacy": "OPEN: unencrypted synthetic-only candidate; app-private storage/backup policy, encryption and consent decision required before real health data"
+    "native_privacy": "BLOCKED_REAL_DATA: default startup denied; explicit synthetic build and approval only, separate unencrypted DB and disabled file port; CSP structural test only. Native encrypted storage/key lifecycle, OS backup/privacy and device acceptance pending"
   },
-  "parent_head": "9cea3869b2dc2babdabfba89d06a76e5a9181dfe",
+  "parent_head": "638bb978413eaef588f43292d18248ad0115e9fb",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE035.md",
-    "previous": "docs/fit-control/evidence/CYCLE034.md",
-    "test_count": 91,
-    "pass": 91,
+    "path": "docs/fit-control/evidence/CYCLE036.md",
+    "previous": "docs/fit-control/evidence/CYCLE035.md",
+    "test_count": 96,
+    "pass": 96,
     "fail": 0,
-    "scope": "Node 22.16.0 actual local file SQLite + inherited mock DOM/file port/plugin-shaped doubles; 85 regression + 6 new; native NOT_RUN",
+    "scope": "Node 22.16.0 local SQLite + mock DOM/file port/plugin-shaped doubles; 91 regression + 5 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
       "mobile/diary-screen.mjs": "3de015c760779a5c4c15518f4237236535864c47",
@@ -88,17 +88,16 @@
       "src/nutrition.ts": "d5ed7f0f06f682625b8b1e4b0d538bcb1bde8ce7",
       "mobile/native-sqlite-driver.mjs": "d0da0f7fd2d6039efdb8dbcb5e67fe3240b194e1",
       "tests/native-sqlite-driver.test.mjs": "5808ef8dd3a4db8eb8365c814227163fa8f55706",
-      "mobile/native-bootstrap.mjs": "1be89e97fcef2c36864d92bb7df2e1fa276ed8fa",
-      "mobile/native-entry.mjs": "e5183695575fdbb957cff860d3ceb6a46c5d6182",
+      "mobile/native-bootstrap.mjs": "2752fca51cf721b065e0ac4d4ece4917b2ce3c57",
+      "mobile/native-entry.mjs": "4a64625eb8d882bee0a33445f9d686984d957b15",
       "mobile/package.json": "71635f30339a0f439711ffe2f7e53b7332c8bdea",
       "mobile/capacitor.config.json": "9e75690f89af665e63b5f4a6bf55e4c1f9528889",
-      "mobile/build-native-web.mjs": "a9f824fa80ab53b2bfcf520f0c87d17467bd03ba",
+      "mobile/build-native-web.mjs": "ec48d3b6d5e2c23ba72a0152fbcf91e55bd081a9",
       "mobile/.gitignore": "ba6214d47352d4669bdfbb6a1d6d3c8ac0c45fac",
-      "tests/native-bootstrap.test.mjs": "5addb32202dac6e8a787730366c627a0b8778051",
-      "mobile/recovery-store.mjs": "7ce0a08be212c549ae5eaa1bddec0ccd55fa9a7e"
+      "tests/native-bootstrap.test.mjs": "665ddac4674e2e0e8cd818455897dd8fe6c359ad",
+      "mobile/recovery-store.mjs": "7ce0a08be212c549ae5eaa1bddec0ccd55fa9a7e",
+      "mobile/privacy-gate.mjs": "eda819735be0dcdfdcc2434a80ce652d3d5edede"
     },
-    "shell_sha256": "6b094b384a88c5f429876bd1ccd6d214d29e1bf1754c9ab0466284053bfd5c78",
-    "shell_bytes": 11985,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,

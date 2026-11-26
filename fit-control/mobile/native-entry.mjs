@@ -7,5 +7,5 @@ const status=document.getElementById('connection-status');
 if(typeof globalThis.structuredClone!=='function'||typeof globalThis.crypto?.randomUUID!=='function'||typeof Object.hasOwn!=='function'){
   status.textContent='Среда не поддерживает обязательные функции. Запуск заблокирован.';
 }else{
-  startNativeDiary({capacitor:Capacitor,makeManager:()=>new SQLiteConnection(CapacitorSQLite),doc:document,config:{date,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',targets:{kcal:null,protein_g:null,fat_g:null,carbs_g:null},idFactory:()=>crypto.randomUUID(),clock:()=>new Date().toISOString(),approve:message=>window.confirm(message)}}).catch(()=>{document.getElementById('main-content').setAttribute('inert','');status.textContent='Запуск заблокирован.';});
+  startNativeDiary({capacitor:Capacitor,makeManager:()=>new SQLiteConnection(CapacitorSQLite),doc:document,privacyMode:__FIT_CONTROL_PRIVACY_MODE__,config:{date,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',targets:{kcal:null,protein_g:null,fat_g:null,carbs_g:null},idFactory:()=>crypto.randomUUID(),clock:()=>new Date().toISOString(),approve:message=>window.confirm(message)}}).catch(()=>{document.getElementById('main-content').setAttribute('inert','');status.textContent='Запуск заблокирован.';});
 }
