@@ -1,0 +1,12 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { validateEntry, DiaryStore } from '../dist/storage.js';
+const date = '2026-01-01', now = '2026-01-01T10:00:00.000Z';
+const make = () => ({ id: '00000000-0000-4000-8000-000000000001', revision: 1, local_date: date, timezone: 'Europe/Moscow', created_at: now, updated_at: now, status: 'confirmed', meal_type: 'breakfast', amount: 150, unit: 'g', food: { name: 'Synthetic food', preparation: 'cooked', basis_amount: 100, basis_unit: 'g', kcal: 120, protein_g: 10, fat_g: 4, carbs_g: 8, source: { confidence: 'D', kind: 'estimate', reference: 'synthetic fixture' } } });
+test('valid complete entry', () => assert.doesNotThrow(() => validateEntry(make())));
+test('draft with unknown amount', () => assert.doesNotThrow(() => validateEntry({ ...make(), status: 'draft', amount: null })));
+test('unknown nutrient retained', () => { const e = make(); e.food.kcal = null; assert.doesNotThrow(() => validateEntry(e)); assert.equal(e.food.kcal, null); });
+for (const [name, edit] of [
+  ['uuid', e => e.id = 'bad'], ['revision', e => e.revision = 0], ['unsafe revision', e => e.revision = Number.MAX_SAFE_INTEGER + 1], ['timezone', e => e.timezone = 'Bad/Zone'], ['offset timezone', e => e.timezone = '+03:00'], ['calendar date', e => e.local_date = '2026-02-30'], ['timestamp', e => e.created_at = '2026-02-30T10:00:00.000Z'], ['timestamp order', e => e.updated_at = '2025-01-01T10:00:00.000Z'], ['meal', e => e.meal_type = 'bad'], ['status', e => e.status = 'bad'], ['name', e => e.food.name = ' '], ['preparation', e => e.food.preparation = 'bad'], ['source mapping', e => e.food.source.confidence = 'A'], ['source reference', e => e.food.source.reference = ' '], ['source timestamp', e => e.food.source.retrieved_at = 'bad'], ['missing source', e => delete e.food.source], ['unexpected field', e => e.extra = true], ['amount', e => e.amount = null], ['negative nutrient', e => e.food.fat_g = -1], ['unit mismatch', e => e.unit = 'ml'], ['missing nutrient', e => delete e.food.kcal]
+]) test('reject ' + name, () => { const e = make(); edit(e); assert.throws(() => validateEntry(e), RangeError); });
+test('missing IndexedDB API fails explicitly', async () => { if (typeof indexedDB === 'undefined') await assert.rejects(() => DiaryStore.open(), ReferenceError); else assert.fail('Expected Node environment without IndexedDB'); });

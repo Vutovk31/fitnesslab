@@ -1,0 +1,24 @@
+import { DiaryStore, DiaryConflict, validateEntry } from '../../dist/storage.js';
+const date = '2026-01-01', now = '2026-01-01T10:00:00.000Z';
+const make = (id = crypto.randomUUID(), extra = {}) => ({ id, revision: 1, local_date: date, timezone: 'Europe/Moscow', created_at: now, updated_at: now, status: 'confirmed', meal_type: 'breakfast', amount: 150, unit: 'g', food: { name: 'Synthetic food', preparation: 'cooked', basis_amount: 100, basis_unit: 'g', kcal: 120, protein_g: 10, fat_g: 4, carbs_g: 8, source: { confidence: 'D', kind: 'estimate', reference: 'synthetic fixture' } }, ...extra });
+const assert = (ok, msg = 'Assertion failed') => { if (!ok) throw new Error(msg); };
+const rejects = async (fn, type) => { try { await fn(); } catch (e) { assert(e instanceof type, String(e)); return; } throw new Error('Expected rejection'); };
+const tests = [];
+const test = async (name, fn) => { try { await fn(); tests.push({ name, pass: true }); } catch (e) { tests.push({ name, pass: false, error: String(e) }); } };
+const name = 'fc-test-' + crypto.randomUUID();
+let db = await DiaryStore.open(name); const a = make();
+await test('create and calculate', async () => { await db.create(a); assert((await db.balance(date, 500)).remainingKcal === 320); });
+await test('duplicate rejected without data loss', async () => { await rejects(() => db.create(a), DiaryConflict); assert((await db.list(date)).length === 1); });
+await test('snapshot copied before asynchronous write', async () => { const b = make(); const p = db.create(b); b.food.kcal = 999; await p; assert((await db.list(date)).find(x => x.id === b.id).food.kcal === 120); await db.remove(b.id, 1, now); });
+await test('close and reopen preserves source and timezone', async () => { db.close(); db = await DiaryStore.open(name); const b = (await db.list(date)).find(x => x.id === a.id); assert(b.timezone === a.timezone && b.food.source.reference === 'synthetic fixture'); });
+await test('planned and draft separate; unknown not zero', async () => { await db.create(make(undefined, { status: 'planned', amount: 50 })); await db.create(make(undefined, { status: 'draft', amount: null })); const b = make(); b.food.kcal = null; await db.create(b); const v = await db.balance(date, 500); assert(v.confirmed.kcal.total === null && v.confirmed.kcal.known === 180 && v.planned.kcal.total === 60 && v.remainingKcal === null); await db.remove(b.id, 1, now); });
+await test('update and stale revision', async () => { const v = await db.update({ ...a, amount: 200 }, 1); assert(v.revision === 2); await rejects(() => db.update(a, 1), DiaryConflict); assert((await db.balance(date, 500)).confirmed.kcal.total === 240); });
+await test('two connections atomic compare-and-swap', async () => { const other = await DiaryStore.open(name); try { const current = (await db.list(date)).find(x => x.id === a.id); const r = await Promise.allSettled([db.update({ ...current, amount: 210 }, 2), other.update({ ...current, amount: 220 }, 2)]); assert(r.filter(x => x.status === 'fulfilled').length === 1 && r.filter(x => x.status === 'rejected' && x.reason instanceof DiaryConflict).length === 1); } finally { other.close(); } });
+await test('bad update rolls back', async () => { const current = (await db.list(date)).find(x => x.id === a.id); await rejects(() => db.update({ ...current, amount: -2 }, 3), RangeError); assert((await db.list(date)).find(x => x.id === a.id).revision === 3); });
+await test('delete tombstone and no accidental resurrection', async () => { const v = await db.remove(a.id, 3, now); assert(v.status === 'deleted' && v.revision === 4); await rejects(() => db.create(a), DiaryConflict); await rejects(() => db.update({ ...v, status: 'confirmed' }, 4), DiaryConflict); assert((await db.balance(date, 500)).confirmed.kcal.total === 0); });
+await test('invalid metadata and source rejected', async () => { for (const v of [make('not-uuid'),make(undefined,{timezone:'Invalid/Zone'}),make(undefined,{local_date:'2026-02-30'}),make(undefined,{food:{...a.food,source:{kind:'estimate',confidence:'A'}}}),make(undefined,{amount:null}),make(undefined,{unexpected:true}),make(undefined,{created_at:'2026-02-30T10:00:00.000Z'})]) await rejects(() => db.create(v), RangeError); });
+await test('calendar date filtering', async () => { await db.create(make(undefined,{local_date:'2026-01-02'})); assert((await db.list('2026-01-02')).length === 1 && (await db.list(date)).every(x => x.local_date === date)); });
+await test('closed database failure surfaces', async () => { db.close(); await rejects(() => db.list(date), DOMException); });
+// A persistent database across document reload and offline operation is tested by the external runner.
+window.fc = { DiaryStore, make, validateEntry, date, now };
+window.fcResults = tests;
