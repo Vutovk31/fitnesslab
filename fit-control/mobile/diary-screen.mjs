@@ -39,7 +39,17 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const modes=[...doc.querySelectorAll('[data-mode]')];
   const el=(tag,text)=>{const e=doc.createElement(tag);e.textContent=text;return e;};
   const action=(label,fn,disabled=false)=>{const b=el('button',label);b.type='button';b.disabled=disabled;b.addEventListener('click',fn);return b;};
-  function reset(){editing=null;meta={};dirty=false;for(const k of fields)controls[k].value=blank[k];}
+  const catalogEnabled=typeof store.findNutrition==='function'&&typeof store.selectNutrition==='function';
+  const catalogStatus=$('catalog-status'),catalogList=$('catalog-list'),catalogIndex=$('catalog-index');
+  let catalogBatch=null,catalogEpoch=0,catalogBusy=false,catalogDisposed=false;
+  function clearCatalog(){catalogEpoch++;catalogBatch=null;catalogList.textContent='';catalogIndex.value='';catalogStatus.textContent=catalogEnabled?'Введите название и найдите шаблон.':'Каталог не подключён. Введите данные вручную.';}
+  function editorForm(){const f={...meta,local_date:c.snapshot().date,timezone:meta.timezone??timezone};for(const k of fields)f[k]=controls[k].value;return f;}
+  const formKey=()=>JSON.stringify([editorForm(),editing]);
+  function renderCatalog(allowed){if(catalogBatch&&catalogBatch.formKey!==formKey())clearCatalog();
+    const can=allowed&&catalogEnabled&&!catalogDisposed;
+    $('catalog-find').disabled=!can;catalogIndex.disabled=!can||!catalogBatch?.matches.length;$('catalog-apply').disabled=catalogIndex.disabled;
+  }
+  function reset(){clearCatalog();editing=null;meta={};dirty=false;for(const k of fields)controls[k].value=blank[k];}
   const transcriptText=$('transcript-text'),transcriptLine=$('transcript-line'),transcriptResult=$('transcript-result');
   let transcriptCandidate=null;
   function invalidateTranscript(){transcriptCandidate=null;transcriptResult.textContent='';}
@@ -55,6 +65,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     $('recovery-status').textContent=!s.recoveryEnabled?'Журнал не подключён.':r.status==='none'?'Незавершённых операций нет.':r.status==='unknown'?'Результат неизвестен. Обновите журнал или перезапустите приложение.':(r.status==='committed'?'Операция сохранена: ':'Операция не применена на момент проверки: ')+kind+'. Проверьте дневник и подтвердите результат.';
     $('recovery-ack').disabled=pending||uncertain||s.busy||s.phase!=='ready'||!['committed','not_applied'].includes(r.status);
     const canTranscript=ready&&!blocked&&!uncertain;
+    if(!canTranscript&&!catalogBusy&&catalogBatch)clearCatalog();renderCatalog(canTranscript);
     voice.sync(canTranscript);recognition.sync(canTranscript);review.render(canTranscript);
     transcriptText.disabled=transcriptLine.disabled=$('transcript-preview').disabled=!canTranscript;
     $('transcript-apply').disabled=!canTranscript||!transcriptCandidate;
@@ -161,6 +172,35 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     clearTranscript();transcriptResult.textContent='Перенесено в редактор. Уточните данные и выберите действие сохранения.';
     error.textContent='';render();controls.name.focus();
   });
+  async function catalogAction(kind){
+    if(!catalogEnabled||catalogDisposed||!canPrepareTranscript())return;
+    const f=editorForm(),key=formKey(),batch=catalogBatch;
+    let selected;
+    if(kind==='apply'){
+      if(!batch||batch.formKey!==key||!/^\d+$/.test(catalogIndex.value))return;
+      selected=batch.matches[Number(catalogIndex.value)-1];if(!selected)return;
+      if(approve('Заменить пищевую ценность, способ приготовления и источник выбранным шаблоном? Название, порция, дата и приём пищи останутся. Сохранение отдельно.')!==true)return;
+      if(!canPrepareTranscript()||key!==formKey()||batch!==catalogBatch)return;
+    }
+    clearCatalog();const epoch=catalogEpoch;catalogBusy=true;pending=true;catalogStatus.textContent='Чтение локального каталога…';render();
+    try{
+      const result=kind==='find'?await store.findNutrition(f):await store.selectNutrition(f,selected.key,true);
+      if(catalogDisposed||epoch!==catalogEpoch||key!==formKey())return;
+      if(kind==='find'){
+        catalogBatch={formKey:key,matches:result.matches};
+        const units={g:'г',ml:'мл',piece:'шт.'},prep={raw:'сырой',cooked:'приготовленный',unknown:'неизвестно'},sources={label:'этикетка (A)',catalog:'каталог (B)',generic:'общие данные (C)',estimate:'оценка (D)'};
+        catalogList.textContent=result.matches.map(({variant:v},i)=>(i+1)+'. '+v.name+' · '+prep[v.preparation]+' · на '+v.basis_amount+' '+units[v.basis_unit]+' · К/Б/Ж/У: '+[v.kcal,v.protein_g,v.fat_g,v.carbs_g].map(x=>x||'—').join(' / ')+' · '+sources[v.source_kind]+' · '+(v.source_reference??'без ссылки')+' · дата: '+(v.source_retrieved_at??'—')+' · лицензия: '+(v.source_license??'—')).join('\n');
+        catalogStatus.textContent=(result.status==='none'?'Нет совпадений. Введите данные вручную.':result.status==='unique'?'Один вариант. Выберите номер 1 и подтвердите.':'Несколько вариантов. Проверьте и выберите номер.')+(result.unusable?' Исключено без обязательного источника: '+result.unusable+'.':'');
+      }else{
+        for(const k of fields)controls[k].value=result[k]??'';
+        meta={...meta,source_retrieved_at:result.source_retrieved_at,source_license:result.source_license};dirty=true;
+        catalogStatus.textContent='Шаблон перенесён. Проверьте данные и сохраните запись отдельно.';
+      }
+    }catch{if(!catalogDisposed&&epoch===catalogEpoch)catalogStatus.textContent='Каталог недоступен, превышен лимит или вариант изменился. Введите данные вручную или повторите поиск.';}
+    finally{catalogBusy=false;pending=false;render();}
+  }
+  $('catalog-find').addEventListener('click',()=>catalogAction('find'));
+  $('catalog-apply').addEventListener('click',()=>catalogAction('apply'));
   $('backup-export').addEventListener('click',()=>backupAction('export'));
   $('backup-import').addEventListener('click',()=>backupAction('import'));
   $('recovery-ack').addEventListener('click',async()=>{
@@ -176,14 +216,14 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     return write(()=>c.setGoals(Object.fromEntries(goalKeys.map(k=>[k,goalValue(goalFields[k].value)])),goalDirty?goalBase:c.snapshot().goalRevision),false,resetGoals);});
   $('cancel-goals').addEventListener('click',()=>{if(pending||blocked)return;if(goalDirty&&!approve('Сбросить несохранённые цели?'))return;resetGoals();render();});
   function remove(row){if(pending||blocked||!approve('Удалить запись?'))return;return write(()=>c.remove(row.id,row.revision),editing?.id===row.id);}
-  form.addEventListener('input',ev=>{dirty=true;if(ev.target===controls.source_kind||ev.target===controls.source_reference){delete meta.source_retrieved_at;delete meta.source_license;}});
+  form.addEventListener('input',ev=>{clearCatalog();dirty=true;if(ev.target===controls.source_kind||ev.target===controls.source_reference){delete meta.source_retrieved_at;delete meta.source_license;}renderCatalog(canPrepareTranscript());});
   form.addEventListener('submit',ev=>{ev.preventDefault();if(pending||blocked)return;const intent=ev.submitter?.value;if(!['confirm','plan','save-draft','edit'].includes(intent))return;
     if(editing?.status==='confirmed'&&intent!=='edit')return;
-    const f={...meta,local_date:c.snapshot().date,timezone:meta.timezone??timezone};for(const k of fields)f[k]=controls[k].value;
+    const f=editorForm();
     return write(()=>c.save(f,intent,editing),true);});
   day.addEventListener('change',()=>{const next=day.value;if(pending||uncertain){render();return;}if((dirty||editing)&&!approve('Отменить несохранённую форму?')){render();return;}reset();clearTranscript();return load(next);});
   $('retry-diary').addEventListener('click',()=>{if(pending||uncertain)return;if(blocked){if(!approve('Сбросить конфликтующую форму?'))return;reset();resetGoals();}return load(c.snapshot().date);});
   for(const id of ['cancel','add'])$(id).addEventListener('click',()=>{if(pending||(dirty&&!approve('Очистить несохранённую форму?')))return;reset();error.textContent='';render();if(id==='add')controls.name.focus();});
   for(const b of modes)b.addEventListener('click',()=>{if(pending||!['confirmed','planned','forecast'].includes(b.dataset.mode))return;mode=b.dataset.mode;render();});
-  mounted.add(doc);reset();render();$('main-content').removeAttribute('inert');$('connection-status').textContent=c.snapshot().durableGoals?'Подключено хранилище. Цели сохраняются локально.':'Подключено хранилище. Редактор целей недоступен.';const ready=load(date);return {ready,snapshot:c.snapshot,dispose(){recognition.dispose();voice.dispose();clearTranscript();}};
+  mounted.add(doc);reset();render();$('main-content').removeAttribute('inert');$('connection-status').textContent=c.snapshot().durableGoals?'Подключено хранилище. Цели сохраняются локально.':'Подключено хранилище. Редактор целей недоступен.';const ready=load(date);return {ready,snapshot:c.snapshot,dispose(){catalogDisposed=true;clearCatalog();recognition.dispose();voice.dispose();clearTranscript();}};
 }
