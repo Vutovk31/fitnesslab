@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {transcriptForm} from '../preview/transcript.mjs';
+import {createPreview} from '../preview/diary-preview.mjs';
+const date='2026-01-01',zone='UTC';
+const f=(text,line=1)=>transcriptForm(text,line,date,zone);
+test('Russian selected physical line and CRLF',()=>{const r=f('Каша; 150 г\r\n\r\nМолоко; 200 мл',3);assert.equal(r.name,'Молоко');assert.equal(r.amount,'200');assert.equal(r.unit,'ml');assert.equal(r.basis_unit,'ml');});
+test('fractional pieces use one piece basis',()=>{const r=f('Яблоко; 0,5 шт.');assert.equal(r.amount,'0,5');assert.equal(r.basis_amount,'1');assert.equal(r.unit,'piece');});
+test('plain text is literal, not inferred',()=>{const r=f('Съел кашу 200 граммов');assert.equal(r.name,'Съел кашу 200 граммов');assert.equal(r.amount,'');});
+test('no invented nutrition or provenance',()=>{const r=f('Каша; 150 г');for(const k of ['kcal','protein_g','fat_g','carbs_g'])assert.equal(r[k],'');assert.equal(r.source_kind,'estimate');assert.equal(r.local_date,date);assert.equal(r.timezone,zone);});
+test('reject empty, bad line and oversized input',()=>{for(const [s,n] of [['',1],['a',0],['a',2],['a',1.5],['x'.repeat(8001),1],['x'.repeat(301),1]])assert.throws(()=>f(s,n),RangeError);});
+test('reject ambiguous or invalid explicit quantities',()=>{for(const s of ['Каша;','Каша; 0 г','Каша; -1 г','Каша; 1 кг','Каша; 1 г; 2 г','Каша; 1e3 г','Каша; '+ '9'.repeat(400)+' г'])assert.throws(()=>f(s),RangeError);});
+test('preparation does not write; explicit editor action writes',()=>{let n=0;const a=createPreview({date,timezone:zone,seed:false,clock:()=>date+'T10:00:00.000Z',idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`});const r=f('Каша; 150 г');assert.equal(a.view(date).hasEntries,false);a.command(r,'confirm');assert.equal(a.view(date).hasEntries,false);a.apply({...r,kcal:'120'},'confirm');assert.equal(a.view(date).cards.kcal.confirmed.total,180);});
