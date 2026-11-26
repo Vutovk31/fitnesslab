@@ -1,10 +1,10 @@
 import {validateEntry} from '../dist/storage.js';
+import {catalogNameKey as normalize} from './catalog-projection.mjs';
 
 // Exact, bounded, local matching. Returned variants are proposals, never writes.
 const MAX_ROWS=2000,MAX_VARIANTS=100;
 const units=['g','ml','piece'],preparations=['raw','cooked','unknown'];
 const nutrients=['kcal','protein_g','fat_g','carbs_g'];
-const normalize=s=>s.trim().normalize('NFC').toLocaleLowerCase('ru-RU');
 const decimal=n=>n===null?'':n.toLocaleString('en-US',{useGrouping:false,maximumSignificantDigits:21});
 export function matchNutrition(entries,{name,unit,preparation='unknown'}={}){
   if(!Array.isArray(entries)||entries.length>MAX_ROWS)throw RangeError('Catalog input limit');
