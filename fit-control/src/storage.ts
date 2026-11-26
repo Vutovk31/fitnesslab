@@ -68,16 +68,18 @@ export class DiaryStore {
       };
     });
   }
-  create(entry: DiaryEntry): Promise<DiaryEntry> {
+  async create(entry: DiaryEntry): Promise<DiaryEntry> {
     const e = structuredClone(entry);
+    validateEntry(e);
     return this.change(e.id, old => {
       if (old !== undefined) throw new DiaryConflict('Duplicate id');
       check(e.revision === 1 && e.status !== 'deleted', 'Invalid initial entry');
       return e;
     });
   }
-  update(entry: DiaryEntry, expectedRevision: number): Promise<DiaryEntry> {
+  async update(entry: DiaryEntry, expectedRevision: number): Promise<DiaryEntry> {
     const e = structuredClone(entry);
+    validateEntry(e);
     return this.change(e.id, old => {
       if (!old || old.revision !== expectedRevision || old.status === 'deleted') throw new DiaryConflict('Revision conflict or deleted entry');
       check(e.revision === expectedRevision && e.created_at === old.created_at && e.updated_at >= old.updated_at && e.status !== 'deleted', 'Invalid update');
@@ -91,7 +93,7 @@ export class DiaryStore {
       return { ...old, revision: old.revision + 1, status: 'deleted', updated_at: updatedAt };
     });
   }
-  list(date: string): Promise<DiaryEntry[]> {
+  async list(date: string): Promise<DiaryEntry[]> {
     dayBalance([], date, null);
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(store, 'readonly');
