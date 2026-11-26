@@ -1,7 +1,7 @@
 import {validateEntry, DiaryConflict} from '../dist/storage.js';
 import {dayBalance} from '../dist/nutrition.js';
 import {matchNutrition,applyNutritionMatch} from './nutrition-matcher.mjs';
-import {CATALOG_TABLE,CATALOG_INDEX,buildCatalogProjection,catalogProjection,rebuildCatalogProjection} from './catalog-projection.mjs';
+import {CATALOG_TABLE,CATALOG_INDEX,buildCatalogProjection,catalogProjection,rebuildCatalogProjection,catalogNameKey} from './catalog-projection.mjs';
 
 // Driver owns an exclusive transaction until callback settles, commits only on
 // success, rolls back on failure, serializes callbacks on a connection, and
@@ -98,7 +98,7 @@ async function verifyProjectionCoverage(tx){
   const orphan=await tx.get('SELECT p.id FROM fc_catalog_projection p LEFT JOIN fc_entries e ON e.id=p.id WHERE e.id IS NULL LIMIT 1',[]);
   check(!missing&&!orphan,'Catalog projection coverage mismatch');
 }
-async function auditProjection(tx){
+async function auditProjection(tx,visit=()=>{}){
     await verifySchema(tx,4);
     check((await tx.get('PRAGMA user_version',[]))?.user_version===4,'Expected schema v4');
     const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries LIMIT ?)',[LARGE_ROWS+1]);
@@ -113,7 +113,7 @@ async function auditProjection(tx){
     while(seen<count.n){
       const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
       check(Array.isArray(rows)&&rows.length===Math.min(PAGE,count.n-seen),'Incomplete audit page');
-      for(const row of rows){const e=decode(row);check(e.id>cursor,'Invalid audit order');used+=bytes(row.payload);check(used<=LARGE_BYTES,'Catalog audit byte limit');await verifyProjectionRow(tx,e);cursor=e.id;seen++;}
+      for(const row of rows){const e=decode(row);check(e.id>cursor,'Invalid audit order');used+=bytes(row.payload);check(used<=LARGE_BYTES,'Catalog audit byte limit');await verifyProjectionRow(tx,e);visit(e,bytes(row.payload));cursor=e.id;seen++;}
     }
     check(seen===count.n&&used===stat.bytes,'Catalog audit snapshot mismatch');return {rows:seen,payloadBytes:used};
 }
@@ -263,6 +263,31 @@ export class SQLiteDiary {
   async selectNutrition(form,key,approved=false){
     check(approved===true&&typeof key==='string','Explicit catalog selection required');
     const f=structuredClone(form);return this.#catalog(entries=>applyNutritionMatch(entries,f,key,true));
+  }
+  // Candidate only: same-transaction audit plus index lookup, no cached trust.
+  // The canonical audit supplies expected IDs, so an omitted index hit cannot look unique.
+  async #indexedCatalog(query,work){
+    matchNutrition([],query);
+    const {name,unit,preparation='unknown'}=query,normalized=catalogNameKey(name);
+    return this.#tx(async tx=>{
+      const expected=[];let used=0;
+      await auditProjection(tx,(e,size)=>{
+        if(!['confirmed','planned'].includes(e.status)||catalogNameKey(e.food.name)!==normalized||e.unit!==unit||(preparation!=='unknown'&&e.food.preparation!==preparation))return;
+        used+=size;check(expected.length<CATALOG_ROWS&&used<=CATALOG_BYTES,'Indexed catalog candidate limit');expected.push(e.id);
+      });
+      const filter=preparation==='unknown'?'':' AND p.preparation=?';
+      const args=[normalized,unit,...(filter?[preparation]:[]),CATALOG_ROWS+1];
+      const rows=await tx.all("SELECT e.id,e.revision,e.local_date,e.payload FROM fc_catalog_projection p INDEXED BY fc_catalog_lookup JOIN fc_entries e ON e.id=p.id WHERE p.name_key=? AND p.unit=? AND p.status IN ('confirmed','planned')"+filter+' ORDER BY e.id LIMIT ?',args);
+      check(Array.isArray(rows)&&rows.length===expected.length,'Indexed catalog completeness mismatch');
+      let actualBytes=0;
+      const entries=rows.map((row,i)=>{check(typeof row?.payload==='string'&&row.payload.length<=ROW_BYTES,'Invalid indexed payload');actualBytes+=bytes(row.payload);check(actualBytes<=CATALOG_BYTES,'Indexed catalog candidate limit');const e=decode(row);check(e.id===expected[i],'Indexed catalog identity mismatch');return e;});
+      check(actualBytes===used,'Indexed catalog byte mismatch');return work(entries);
+    });
+  }
+  async findNutritionIndexed(query){const q=structuredClone(query);return this.#indexedCatalog(q,entries=>matchNutrition(entries,q));}
+  async selectNutritionIndexed(form,key,approved=false){
+    check(approved===true&&typeof key==='string','Explicit catalog selection required');
+    const f=structuredClone(form);return this.#indexedCatalog(f,entries=>applyNutritionMatch(entries,f,key,true));
   }
   async exportBackup(version=2){
     check(version===2||version===3,'Unsupported export version');
