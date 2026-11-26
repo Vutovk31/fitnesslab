@@ -1,0 +1,58 @@
+import {prepareEntry} from '../dist/diary-editor.js';
+import {diaryView} from '../dist/diary-view.js';
+import {DiaryConflict} from '../dist/storage.js';
+
+// Controller owns only a read projection. Store remains the source of truth.
+// Targets are session settings until durable preferences are implemented.
+export function persistentDiary({store,date,targets,idFactory,clock}) {
+  for(const name of ['list','create','update','remove'])if(typeof store?.[name]!=='function')throw new TypeError('Unsupported diary store');
+  if(typeof idFactory!=='function'||typeof clock!=='function')throw new TypeError('Missing identity or clock');
+  const goals=structuredClone(targets);diaryView([],date,goals);
+  let rows=[],generation=0,busy=false;
+  let state={date,phase:'idle',view:null,error:null};
+  const snapshot=()=>structuredClone({...state,busy});
+  async function selectDate(next){
+    diaryView([],next,goals);
+    const token=++generation;
+    const previous=state.date===next?state.view:null;
+    state={date:next,phase:'loading',view:previous,error:null};
+    try{
+      const data=structuredClone(await store.list(next));
+      if(token!==generation)return false;
+      if(data.some(e=>e.local_date!==next))throw new Error('Unexpected storage date');
+      const view=diaryView(data,next,goals);
+      rows=data;state={date:next,phase:'ready',view,error:null};return true;
+    }catch{
+      if(token===generation){rows=[];state={date:next,phase:'error',view:previous,error:'READ_FAILED'};}
+      return false;
+    }
+  }
+  function current(id,revision){
+    const e=rows.find(x=>x.id===id);
+    if(!e||e.status==='deleted'||e.revision!==revision)throw new DiaryConflict('Revision conflict or deleted entry');
+    return structuredClone(e);
+  }
+  async function mutate(work){
+    if(busy||state.phase!=='ready')throw new Error('Diary not ready or busy');
+    busy=true;state={...state,error:null};
+    try{
+      let entry;
+      try{entry=await work();}catch(e){state={...state,error:e instanceof DiaryConflict?'CONFLICT':'WRITE_FAILED'};throw e;}
+      // The storage promise resolves only after commit. A refresh failure cannot
+      // turn a committed write into a failed write (which could cause duplicates).
+      const refreshed=await selectDate(state.date);
+      return {committed:true,entry:structuredClone(entry),refreshed};
+    }finally{busy=false;}
+  }
+  async function save(form,intent,edit=null){
+    const input=structuredClone(form),ref=structuredClone(edit);
+    return mutate(async()=>{
+      if(input.local_date!==state.date)throw new RangeError('Select the form date first');
+      const previous=ref===null?undefined:current(ref.id,ref.revision);
+      const c=prepareEntry(input,intent,{id:previous?.id??idFactory(),now:clock(),previous});
+      return previous?store.update(c.entry,c.expectedRevision):store.create(c.entry);
+    });
+  }
+  async function remove(id,revision){return mutate(async()=>{current(id,revision);return store.remove(id,revision,clock());});}
+  return {snapshot,selectDate,save,remove};
+}
