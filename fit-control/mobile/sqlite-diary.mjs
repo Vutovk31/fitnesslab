@@ -159,6 +159,23 @@ export class SQLiteDiary {
       return {date,entries,goals:readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])),recovery:recoveryView(recoveryRow(await tx.get(RECOVERY_SELECT,[])))};
     });
   }
+  // Complete day and goals in one transaction; synthetic publication caller only.
+  async readWidgetDay(date){
+    dayBalance([],date,null);return this.#tx(async tx=>{
+      check(recoveryRow(await tx.get(RECOVERY_SELECT,[])).state==='idle','Widget source requires idle journal');
+      const count=await tx.get('SELECT count(*) AS n FROM (SELECT 1 FROM fc_entries WHERE local_date=? LIMIT ?)',[date,CATALOG_ROWS+1]);
+      check(Number.isSafeInteger(count?.n)&&count.n>=0&&count.n<=CATALOG_ROWS,'Widget day row limit');
+      const stat=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest, coalesce(max(length(CAST(id AS BLOB))),0) AS idBytes FROM fc_entries WHERE local_date=?',[date]);
+      check(['bytes','largest','idBytes'].every(k=>Number.isSafeInteger(stat?.[k])&&stat[k]>=0)&&stat.bytes<=CATALOG_BYTES&&stat.largest<=ROW_BYTES&&stat.idBytes<=36,'Widget day byte limit');
+      const rows=await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date]);
+      check(rows.length===count.n,'Widget day count mismatch');let used=0,cursor='';
+      const entries=rows.map(row=>{const e=decode(row);used+=bytes(row.payload);check(e.local_date===date&&e.id>cursor&&(e.status!=='deleted'||e.revision>=2),'Invalid widget day row');cursor=e.id;return e;});
+      check(used===stat.bytes,'Widget day byte mismatch');
+      const goalSize=await tx.get('SELECT coalesce(max(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
+      check(Number.isSafeInteger(goalSize?.bytes)&&goalSize.bytes>=0&&goalSize.bytes<=ROW_BYTES,'Widget goals byte limit');
+      return {complete:true,date,entries,targets:readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[])).targets};
+    });
+  }
   // Explicit maintenance path; normal open may reject damaged projection coverage.
   static async repairCatalog(driver,approved=false){
     check(approved===true,'Explicit catalog repair approval required');
