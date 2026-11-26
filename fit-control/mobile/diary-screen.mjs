@@ -32,7 +32,11 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   const el=(tag,text)=>{const e=doc.createElement(tag);e.textContent=text;return e;};
   const action=(label,fn,disabled=false)=>{const b=el('button',label);b.type='button';b.disabled=disabled;b.addEventListener('click',fn);return b;};
   function reset(){editing=null;meta={};dirty=false;for(const k of fields)controls[k].value=blank[k];}
-  function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy;
+  const recoveryBlocked=()=>c.snapshot().recovery.status!=='none';
+  function render(){const s=c.snapshot(),ready=s.phase==='ready'&&!pending&&!s.busy&&s.recovery.status==='none';
+    const r=s.recovery,kind={create:'добавление',update:'изменение',remove:'удаление',goals:'цели',restore:'импорт'}[r.kind]??'';
+    $('recovery-status').textContent=!s.recoveryEnabled?'Журнал не подключён.':r.status==='none'?'Незавершённых операций нет.':r.status==='unknown'?'Результат неизвестен. Обновите журнал или перезапустите приложение.':(r.status==='committed'?'Операция сохранена: ':'Операция не применена на момент проверки: ')+kind+'. Проверьте дневник и подтвердите результат.';
+    $('recovery-ack').disabled=pending||uncertain||s.busy||s.phase!=='ready'||!['committed','not_applied'].includes(r.status);
     day.value=s.date;day.disabled=pending||uncertain;form.setAttribute('aria-busy',String(pending));
     for(const e of Object.values(controls))e.disabled=!ready;
     for(const b of buttons)b.disabled=!ready||blocked;
@@ -59,7 +63,7 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     if(v)for(const [k,label] of [['protein_g','Белки'],['fat_g','Жиры'],['carbs_g','Углеводы']])macros.append(el('p',label+': '+total(v.cards[k][mode])+' г · остаток: '+fmt(v.cards[k].remaining)+' г'));
     if(v)for(const g of v.groups){const section=el('section','');section.append(el('h3',meals[g.meal]));for(const row of g.rows){const item=el('div','');item.className='entry';item.append(el('span',row.name+' · '+statuses[row.status]+' · '+fmt(row.amount)+' '+row.unit),action('Изменить',()=>edit(row),!ready||blocked),action('Удалить',()=>remove(row),!ready||blocked));section.append(item);}groups.append(section);}
   }
-  function edit(row){if(pending||blocked||c.snapshot().phase!=='ready'||(dirty&&!approve('Заменить несохранённую форму?')))return;
+  function edit(row){if(pending||blocked||recoveryBlocked()||c.snapshot().phase!=='ready'||(dirty&&!approve('Заменить несохранённую форму?')))return;
     try{const e=c.getEntry(row.id,row.revision);reset();editing={id:e.id,revision:e.revision,status:e.status};meta={timezone:e.timezone,source_retrieved_at:e.food.source.retrieved_at,source_license:e.food.source.license};
       const f={name:e.food.name,meal_type:e.meal_type,preparation:e.food.preparation,amount:decimal(e.amount),unit:e.unit,basis_amount:decimal(e.food.basis_amount),basis_unit:e.food.basis_unit,kcal:decimal(e.food.kcal),protein_g:decimal(e.food.protein_g),fat_g:decimal(e.food.fat_g),carbs_g:decimal(e.food.carbs_g),source_kind:e.food.source.kind,source_reference:e.food.source.reference??''};
       for(const k of fields)controls[k].value=f[k];error.textContent='';render();controls.name.focus();
@@ -68,12 +72,12 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
     try{const ok=await c.selectDate(next);if(ok)blocked=false;status.textContent=ok?'Дневник загружен.':'Не удалось загрузить. Повторите чтение.';return ok;}
     catch{status.textContent='Некорректная дата.';return false;}
     finally{pending=false;render();}}
-  async function write(work,clear,onCommit=()=>{}){if(pending||blocked||c.snapshot().phase!=='ready')return;pending=true;error.textContent='';status.textContent='Сохранение…';render();
+  async function write(work,clear,onCommit=()=>{}){if(pending||blocked||recoveryBlocked()||c.snapshot().phase!=='ready')return;pending=true;error.textContent='';status.textContent='Сохранение…';render();
     try{const result=await work();if(clear)reset();onCommit();status.textContent=result.refreshed?'Сохранено.':'Сохранено. Обновление не удалось — повторите чтение, не запись.';}
     catch{const code=c.snapshot().error;const conflict=code==='CONFLICT';uncertain=code==='COMMIT_OUTCOME_UNKNOWN';blocked=conflict||uncertain;if(uncertain){error.textContent='Исход сохранения неизвестен. Закройте приложение, откройте заново и проверьте запись до повторного ввода.';status.textContent='Требуется сверка базы.';return;}error.textContent=conflict?'Конфликт версий. Обновите дневник и заново выберите запись.':'Не сохранено. Проверьте поля или повторите позже.';status.textContent='Изменения не подтверждены.';}
     finally{pending=false;render();}}
   async function backupAction(kind){
-    if(pending||blocked||!backupEnabled||c.snapshot().phase!=='ready')return;
+    if(pending||blocked||recoveryBlocked()||!backupEnabled||c.snapshot().phase!=='ready')return;
     if(kind==='export'&&approve('Экспорт незашифрованной копии сохранённых тестовых данных?')!==true)return;
     pending=true;backupStatus.textContent='Подготовка…';render();
     try{
@@ -100,6 +104,14 @@ export function mountDiaryScreen(doc,{store,date,timezone,targets,idFactory,cloc
   }
   $('backup-export').addEventListener('click',()=>backupAction('export'));
   $('backup-import').addEventListener('click',()=>backupAction('import'));
+  $('recovery-ack').addEventListener('click',async()=>{
+    const s=c.snapshot(),r=s.recovery;
+    if(pending||uncertain||s.phase!=='ready'||!['committed','not_applied'].includes(r.status)||approve('Подтвердить проверенный результат? Несохранённые формы будут сброшены. Операция не будет повторена.')!==true)return;
+    pending=true;render();
+    try{const ok=await c.acknowledgeRecovery(r.sequence,r.status,true);reset();resetGoals();blocked=false;error.textContent='';status.textContent=ok?'Результат подтверждён.':'Результат подтверждён, требуется обновление.';}
+    catch{error.textContent='Подтверждение не завершено. Обновите журнал; не повторяйте операцию.';}
+    finally{pending=false;render();}
+  });
   goalForm.addEventListener('input',()=>{if(!goalDirty){goalBase=c.snapshot().goalRevision;goalDirty=true;}});
   goalForm.addEventListener('submit',ev=>{ev.preventDefault();if(pending||blocked||!c.snapshot().durableGoals)return;
     return write(()=>c.setGoals(Object.fromEntries(goalKeys.map(k=>[k,goalValue(goalFields[k].value)])),goalDirty?goalBase:c.snapshot().goalRevision),false,resetGoals);});

@@ -1,5 +1,6 @@
 import {nativeSQLiteDriver} from './native-sqlite-driver.mjs';
 import {SQLiteDiary} from './sqlite-diary.mjs';
+import {trackedDiaryStore} from './recovery-store.mjs';
 import {mountDiaryScreen} from './diary-screen.mjs';
 const database='fit_control_diary_v1', attempted=new WeakSet();
 // Native-only synthetic acceptance candidate. No automatic fallback or retry.
@@ -20,7 +21,7 @@ export async function startNativeDiary({capacitor,makeManager,doc,config,mount=m
     const driver=nativeSQLiteDriver(connection,()=>manager.closeConnection(database,false));
     stage='SCHEMA';store=await SQLiteDiary.open(driver);
     const {targets}=await store.getGoals();
-    stage='UI';const ui=mount(doc,{...config,targets,store});
+    stage='UI';const ui=mount(doc,{...config,targets,store:trackedDiaryStore(store)});
     if(await ui.ready!==true)throw Error('Initial read failed');
     let closing;
     return {status:'ready',close(){if(!closing){main.setAttribute('inert','');status.textContent='Хранилище закрывается.';closing=store.close();}return closing;}};
