@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "045-M06D2-NUTRITION-REVIEW",
-  "status": "NUTRITION_REVIEW_UI_LOCAL_PASS_NATIVE_BUILD_BLOCKED",
+  "cycle": "046-M06D3-NUTRITION-MATCHER",
+  "status": "NUTRITION_MATCHER_LOCAL_PASS_STORAGE_UI_NATIVE_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,13 +42,13 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M06D3",
-    "title": "Local nutrition catalog candidate matching",
-    "scope": "Review existing preview catalog, nutrition/storage/editor and tests. Implement bounded exact local candidate matching from validated entries/templates with preserved source/provenance, preparation, basis units and unknowns; distinguish no/unique/multiple matches, avoid fuzzy silent identification, no automatic assignment or fabricated KБЖУ. Test pure matcher and existing editor compatibility; keep native privacy/build/STT gates closed and separate. No real data, network, SDK retry, main/backup or automation changes.",
+    "id": "M06D4",
+    "title": "Bounded SQLite nutrition catalog read path",
+    "scope": "Review current SQLiteDiary/native driver and exact matcher. Implement read-only bounded local catalog query/snapshot with explicit overflow refusal, no unbounded full export or false unique result from truncation. Validate rows, exclude drafts/deleted, preserve provenance and matcher semantics, use actual local SQLite tests for limits, corrupt rows and read errors; no writes/schema changes unless justified. Subsequent UI must revalidate fresh snapshot before explicit selection. Keep native privacy/build/STT gates blocked, main/backup and automations unchanged, no SDK retry.",
     "acceptance": [
-      "Exact local variants, unit/preparation/source distinctions and unknowns verified",
-      "Ambiguity and no match do not silently assign nutrient data; explicit user selection required",
-      "Local evidence and existing contracts preserved; actual native acceptance separately open"
+      "Bounded read path feeds exact matcher; no/unique/ambiguous results verified against actual local SQLite",
+      "Overflow, malformed data or failed read refuse result without mutation; no silent truncation",
+      "Local tests and evidence recorded; native acceptance separate"
     ],
     "rollback": "Scoped source revert only; preserve user data and keys."
   },
@@ -57,7 +57,7 @@
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M06D2_NODE_PASS_152_148_REGRESSION_4_NEW; REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM_MEDIA_STT; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
+    "runtime_tests": "M06D3_NODE_PASS_164_152_REGRESSION_6_RESTORED_CATALOG_6_NEW; PURE_MATCHER_EDITOR_INHERITED_REAL_LOCAL_SQLITE_WEBCRYPTO_MOCK_DOM; RESTORED_COMPILED_DOMAIN; NATIVE_BUILD_BLOCKED_DEVICE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
@@ -65,16 +65,16 @@
     "ambiguous_commit": "OPEN_NATIVE: journal integrated through native bootstrap wrapper, explicit acknowledgement and local loss/reopen fault tests PASS; actual OS kill/native lifecycle and UX acceptance pending",
     "native_privacy": "BLOCKED_REAL_DATA: default denied, isolated synthetic unencrypted DB, native file/passphrase ports disabled. Key lifecycle decision-only contract locally tested; trusted native observer/provider, SQLCipher/key storage, OS backup policy and device acceptance NOT_RUN",
     "voice": "OPEN_NATIVE: manual transcript, synthetic capture, offline recognition contract and integrated review/lease local PASS; actual audio-to-provider integration, microphone/STT, ru-RU availability, permissions/network/lifecycle/teardown/device acceptance NOT_RUN",
-    "nutrition_intelligence": "OPEN: bounded parser and single-candidate review UI local PASS; queue in-memory not save-linked, exact catalog matching and semantic language understanding pending; no auto writes"
+    "nutrition_intelligence": "OPEN: bounded parser/review and pure exact catalog matcher local PASS; SQLite catalog read path and explicit matcher UI pending; no external food dataset or auto writes"
   },
-  "parent_head": "19a5a28ffc4aae59e64530b0fbd12969cd46ae8f",
+  "parent_head": "d1b1022b99bb9431540262d15751ccf085111ee3",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE045.md",
-    "previous": "docs/fit-control/evidence/CYCLE044.md",
-    "test_count": 152,
-    "pass": 152,
+    "path": "docs/fit-control/evidence/CYCLE046.md",
+    "previous": "docs/fit-control/evidence/CYCLE045.md",
+    "test_count": 164,
+    "pass": 164,
     "fail": 0,
-    "scope": "Node 22.16.0 actual local SQLite/WebCrypto + mock DOM/ports; 148 regression +4 new; native NOT_RUN",
+    "scope": "Node 22.16.0 pure matcher/editor + inherited actual local SQLite/WebCrypto/mock DOM; 152 regression +6 restored unchanged catalog +6 new; native NOT_RUN",
     "tested_blobs": {
       "mobile/persistent-diary.mjs": "1a6e04c001f80ac7e972bc003da3dd5b26f8a19f",
       "mobile/diary-screen.mjs": "5069bcee9afd21f95984b0d839b808decc7082b9",
@@ -115,10 +115,11 @@
       "mobile/recognition-screen.mjs": "f34948c604957d74b1416e583e9a09278046dc25",
       "mobile/nutrition-candidates.mjs": "314b672be69385749d642038058bef1f15c93155",
       "tests/nutrition-candidates.test.mjs": "bac724ed832f9f92b38d820fffb8b1b9640f3207",
-      "mobile/candidate-review.mjs": "420367b840991ff07b25e35310bebc07209f51d3"
+      "mobile/candidate-review.mjs": "420367b840991ff07b25e35310bebc07209f51d3",
+      "mobile/nutrition-matcher.mjs": "bed2573106c8dd78abb6a85b38e0ccb860880dee",
+      "tests/nutrition-matcher.test.mjs": "47eed37e19f1d4c25523089f01d5b64a01ca00cc",
+      "tests/catalog.test.mjs": "fc6ffc6cd0318252cf99ba31e107f573b9c66517"
     },
-    "shell_sha256": "0d9e306a88c2aadbbf0580176dad4c9f61df2bec5cceb9403c8d7ca84dd36a9b",
-    "shell_bytes": 15616,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
