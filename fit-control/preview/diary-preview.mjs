@@ -92,11 +92,25 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
   }
   function view(day){return diaryView(rows,day,goals);}
   function get(id){return structuredClone(find(id));}
+  // Derived catalog: no separate persistent store, no invented nutrition.
+  function catalog(query='',day=date,zone=timezone){
+    if(typeof query!=='string')throw new RangeError('Некорректный поиск');
+    const needle=query.trim().toLocaleLowerCase('ru-RU'), unique=new Map();
+    for(const e of rows){
+      if(e.status!=='confirmed'&&e.status!=='planned')continue;
+      const {name,preparation,unit,basis_amount,basis_unit,kcal,protein_g,fat_g,carbs_g,source_kind,source_reference,source_retrieved_at,source_license}=toForm(e);
+      if(!name.toLocaleLowerCase('ru-RU').includes(needle))continue;
+      const fields={name,preparation,unit,basis_amount,basis_unit,kcal,protein_g,fat_g,carbs_g,source_kind,source_reference,source_retrieved_at,source_license};
+      const key=JSON.stringify(fields);
+      if(!unique.has(key))unique.set(key,{...makeForm(day,zone),...fields});
+    }
+    return [...unique.values()].sort((a,b)=>a.name.localeCompare(b.name,'ru-RU'));
+  }
   if(seed){
     const base=makeForm(date,timezone);
     apply({...base,name:'Овсяная каша (пример)',amount:'180',kcal:'110',protein_g:'4',fat_g:'3',carbs_g:'17',preparation:'cooked'},'confirm');
     apply({...base,name:'Творог (пример)',amount:'150',kcal:'120',protein_g:'16',fat_g:'5',carbs_g:'3'},'confirm');
     apply({...base,name:'Курица (пример)',meal_type:'lunch',amount:'200',kcal:'165',protein_g:'31',fat_g:'4',carbs_g:'0',preparation:'cooked'},'plan');
   }
-  return {command,apply,remove,view,get,setTargets,getTargets,inspectBackup,exportBackup,restoreBackup};
+  return {command,apply,remove,view,get,setTargets,getTargets,inspectBackup,exportBackup,restoreBackup,catalog};
 }

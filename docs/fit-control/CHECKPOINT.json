@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "013-P0-04-PREP-BACKUP",
-  "status": "BACKUP_TARGETED_PASS_STORAGE_GATE_OPEN",
+  "cycle": "014-P1-01-PREP-CATALOG",
+  "status": "CATALOG_TARGETED_PASS_STORAGE_GATE_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,14 +42,15 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "P1-01-PREP-CATALOG",
-    "title": "Reusable offline food templates from validated existing diary entries",
-    "scope": "If valid browser receipt arrives prioritize P0-02B. Otherwise derive reusable templates from current temporary diary; no extra store or guesses; explicit editor confirmation.",
+    "id": "P1-03-PREP-MEAL",
+    "title": "Construct a meal plan from existing food templates",
+    "scope": "If actual browser receipt is available prioritize P0-02B. Otherwise implement a local meal composition preview using existing catalog, portion and editor logic, no guesses, no external data. Review totals and explicitly confirm planned entries; avoid partial batch writes. Preserve previous functionality.",
     "acceptance": [
-      "Preserve source/basis/preparation, not portion or status",
-      "No implicit write",
-      "Unknown values and distinct variants preserved",
-      "Targeted regression and mock DOM evidence"
+      "Reuse existing canonical calculation and source metadata",
+      "Separate planned and confirmed intake",
+      "Unknown stays unknown",
+      "Explicit confirmation and atomic batch or no write",
+      "Targeted tests and honest DOM-only evidence"
     ],
     "rollback": "Revert scoped commit."
   },
@@ -58,33 +59,34 @@
     "native_ios": "requires Xcode/signing and physical device acceptance",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "PREVIEW_TARGETED_PASS_74; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
+    "runtime_tests": "PREVIEW_TARGETED_PASS_80; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
   },
-  "parent_head": "aae576f189beb4489b21906a9ce5c44f3d6de7df",
+  "parent_head": "6653b98da712c580943d70445503789b55e8686c",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE013.md",
-    "previous": "docs/fit-control/evidence/CYCLE012.md",
-    "test_count": 74,
-    "pass": 74,
+    "path": "docs/fit-control/evidence/CYCLE014.md",
+    "previous": "docs/fit-control/evidence/CYCLE013.md",
+    "test_count": 80,
+    "pass": 80,
     "fail": 0,
-    "scope": "61 prior targeted + 13 backup tests; first-script minimal DOM smoke; no real browser, file dialog or download",
+    "scope": "74 previous + 6 catalog tests; first-script minimal DOM smoke; real browser not run",
     "tested_blobs": {
       "preview/build.py": "f1ac01e6b0828266b03a433b1a8904c286accf86",
       "preview/daily-report.mjs": "ba816538be242ad46a5bb7732a81e6c9bc63d56f",
-      "preview/diary-preview.mjs": "a68fb42e9764dabb7024467c8674f53b739f689e",
-      "preview/index.html": "bce2cdbcf2eb817bb5917f4aa3383e8ee56c807d",
+      "preview/diary-preview.mjs": "a3a2054bf96d94da653f0b148d669275edb196fc",
+      "preview/index.html": "b385d894150e418d647b091012c50b3521f848ec",
       "tests/daily-report.test.mjs": "66b5e5f0c6dc994f12b3971133a33422e0dba855",
       "tests/diary-preview.test.mjs": "b765e619f6c782784bcc2a0a024eacf55b9beb0c",
-      "tests/dom-smoke.mjs": "4b32957ca64406ecc5f7310cf682bd6d30cb4874",
+      "tests/dom-smoke.mjs": "73df70be09d49dcbfd2d150832b16192521cbab3",
       "tests/preview-goals.test.mjs": "e17fa3b67a0e4344abd161b4a638b8994a7511a1",
       "preview/voice.mjs": "d4cb6a0b9bef0dad373804bcc831599c2ff9fd80",
       "tests/voice.test.mjs": "0042dfeab4f105ed2f7adb058fb4bd82a308e777",
       "preview/transcript.mjs": "86e9205db6c73bd3cf9d56bcc3d286c5855c9cf3",
       "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490",
-      "tests/backup.test.mjs": "de22b5a09ff9a56aa128c7a5f4597fa71675707a"
+      "tests/backup.test.mjs": "de22b5a09ff9a56aa128c7a5f4597fa71675707a",
+      "tests/catalog.test.mjs": "fc6ffc6cd0318252cf99ba31e107f573b9c66517"
     },
-    "html_sha256": "710c58b0027fcb27757a400fbd8889b260814b4113631d8ba37aa1679465f1a1",
-    "html_bytes": 231429,
+    "html_sha256": "021cee9dc2306afa80e6023d61603fddbe77789bc1aa3cc56fb5104574aa722a",
+    "html_bytes": 236655,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,

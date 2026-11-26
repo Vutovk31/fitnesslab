@@ -1,0 +1,12 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createPreview,makeForm} from '../preview/diary-preview.mjs';
+const date='2026-01-01',zone='UTC';
+const setup=()=>{let n=0;return createPreview({date,timezone:zone,seed:false,clock:()=>date+'T10:00:00.000Z',idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`});};
+const f=(o={})=>({...makeForm(date,zone),name:'Каша',amount:'150',kcal:'120',source_kind:'catalog',source_reference:'fixture',source_license:'example',...o});
+test('distinct portion/date/status collapse to same template',()=>{const a=setup();a.apply(f(),'confirm');a.apply(f({amount:'200',local_date:'2026-01-02'}),'plan');assert.equal(a.catalog().length,1);});
+test('distinct preparation, nutrient or source variants retained',()=>{const a=setup();for(const o of [{},{preparation:'raw'},{kcal:'121'},{source_reference:'other'}])a.apply(f(o),'confirm');assert.equal(a.catalog().length,4);});
+test('draft excluded; deletion updates derived catalog',()=>{const a=setup();a.apply(f(),'save-draft');const e=a.apply(f({name:'Другой'}),'confirm');assert.equal(a.catalog().length,1);a.remove(e.id,e.revision);assert.equal(a.catalog().length,0);});
+test('new form preserves source and unknowns but clears amount and context',()=>{const a=setup();a.apply(f({kcal:'',meal_type:'dinner',preparation:'cooked'}),'plan');const r=a.catalog('КАША','2026-01-02','Europe/Moscow')[0];assert.equal(r.amount,'');assert.equal(r.kcal,'');assert.equal(r.source_reference,'fixture');assert.equal(r.source_license,'example');assert.equal(r.preparation,'cooked');assert.equal(r.meal_type,'breakfast');assert.equal(r.local_date,'2026-01-02');assert.equal(r.timezone,'Europe/Moscow');assert.equal('status' in r,false);});
+test('read only until explicit submit, isolated form',()=>{const a=setup();a.apply(f(),'confirm');const before=a.exportBackup(),r=a.catalog()[0];r.name='Changed';assert.equal(a.exportBackup(),before);assert.equal(a.catalog()[0].name,'Каша');a.apply({...a.catalog()[0],amount:'100'},'confirm');assert.equal(a.view(date).cards.kcal.confirmed.total,300);});
+test('restored rows regenerate catalog; search case-insensitive',()=>{const a=setup(),b=setup();a.apply(f(),'confirm');b.restoreBackup(a.exportBackup(),true);assert.deepEqual(b.catalog(' кАш '),a.catalog());assert.equal(b.catalog('нет').length,0);});
