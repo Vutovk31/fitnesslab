@@ -28,23 +28,61 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
       next[k]=n;
     }
     diaryView(rows,date,next);
+    backupTextFor(rows,next);
     goals=next;
     return {...goals};
   }
   function getTargets(){return {...goals};}
+  const maxBackupBytes=2*1024*1024, maxRecords=1000;
+  function exactKeys(value, keys) {
+    return value!==null && typeof value==='object' && !Array.isArray(value) && Object.keys(value).length===keys.length && keys.every(k=>Object.hasOwn(value,k));
+  }
+  function inspectBackup(text) {
+    if(typeof text!=='string'||text.length>maxBackupBytes||new TextEncoder().encode(text).length>maxBackupBytes)throw new RangeError('Резервная копия превышает 2 МиБ');
+    const b=JSON.parse(text);
+    if(!exactKeys(b,['schema_version','product','mode','entries','targets'])||b.schema_version!==1||b.product!=='FIT CONTROL'||b.mode!=='synthetic_preview')throw new RangeError('Несовместимый формат резервной копии');
+    if(!Array.isArray(b.entries)||b.entries.length>maxRecords||!exactKeys(b.targets,Object.keys(targets)))throw new RangeError('Некорректные записи или цели');
+    // The canonical read model validates every record and rejects duplicate IDs.
+    diaryView(b.entries,date,b.targets);
+    for(const day of new Set(b.entries.map(e=>e.local_date)))if(day!==date)diaryView(b.entries,day,b.targets);
+    return b;
+  }
+  function backupTextFor(entries,goalValues){
+    const payload={schema_version:1,product:'FIT CONTROL',mode:'synthetic_preview',entries,targets:goalValues};
+    const pretty=JSON.stringify(payload,null,2);
+    if(new TextEncoder().encode(pretty).length<=maxBackupBytes)return pretty;
+    const compact=JSON.stringify(payload);
+    if(new TextEncoder().encode(compact).length>maxBackupBytes)throw new RangeError('Достигнут лимит резервной копии 2 МиБ; текущие данные сохранены');
+    return compact;
+  }
+  function exportBackup(){
+    const text=backupTextFor(rows,goals);
+    inspectBackup(text);return text;
+  }
+  function restoreBackup(text,approved=false){
+    if(approved!==true)throw new Error('Требуется явное подтверждение замены');
+    const b=inspectBackup(text);backupTextFor(b.entries,b.targets);rows=b.entries;goals=b.targets;
+    return rows.length;
+  }
+  function nextId(){
+    for(let i=0;i<=maxRecords;i++){const id=idFactory();if(!rows.some(r=>r.id===id))return id;}
+    throw new Error('Не удалось выделить уникальный идентификатор');
+  }
   const find=id=>{const e=rows.find(r=>r.id===id);if(!e||e.status==='deleted')throw Error('Запись не найдена');return e;};
   function command(form,intent,id,revision) {
     const previous=id?find(id):undefined;
     if(previous && previous.revision!==revision)throw Error('Запись изменилась. Откройте её заново.');
-    return prepareEntry(form,intent,{id:previous?.id??idFactory(),now:clock(),previous});
+    return prepareEntry(form,intent,{id:previous?.id??nextId(),now:clock(),previous});
   }
   function apply(form,intent,id,revision) {
     const c=command(form,intent,id,revision);
     if(rows.some(r=>r.id===c.entry.id) && !id)throw Error('Повтор идентификатора');
     const next={...c.entry,revision:id?c.entry.revision+1:1};
+    if(!id&&rows.length>=maxRecords)throw new RangeError('Достигнут лимит 1000 записей');
     const candidate=id?rows.map(r=>r.id===id?next:r):[...rows,next];
     // Reject aggregate overflow before changing temporary state.
     diaryView(candidate,next.local_date,goals);
+    backupTextFor(candidate,goals);
     rows=candidate;
     return structuredClone(next);
   }
@@ -60,5 +98,5 @@ export function createPreview({date,timezone,idFactory,clock,seed=true}) {
     apply({...base,name:'Творог (пример)',amount:'150',kcal:'120',protein_g:'16',fat_g:'5',carbs_g:'3'},'confirm');
     apply({...base,name:'Курица (пример)',meal_type:'lunch',amount:'200',kcal:'165',protein_g:'31',fat_g:'4',carbs_g:'0',preparation:'cooked'},'plan');
   }
-  return {command,apply,remove,view,get,setTargets,getTargets};
+  return {command,apply,remove,view,get,setTargets,getTargets,inspectBackup,exportBackup,restoreBackup};
 }

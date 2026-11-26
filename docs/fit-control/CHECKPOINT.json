@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "012-P0-03-PREP-TEXT",
-  "status": "TRANSCRIPT_TARGETED_PASS_STORAGE_GATE_OPEN",
+  "cycle": "013-P0-04-PREP-BACKUP",
+  "status": "BACKUP_TARGETED_PASS_STORAGE_GATE_OPEN",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,48 +42,49 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "P0-04-PREP-BACKUP",
-    "title": "Versioned local diary backup export and validated atomic restore in preview",
-    "scope": "If valid browser receipt arrives, prioritize P0-02B verification. Otherwise provide explicit local JSON backup export/import of temporary diary and targets, using existing validation and domain models; do not create second persistent store or upload. Validate entire candidate before replace; confirmation required, reject malformed, oversized, duplicate, incompatible version or corrupt input; no partial replacement. Synthetic preview only. Preserve existing voice/text/report functionality. No recognition claim.",
+    "id": "P1-01-PREP-CATALOG",
+    "title": "Reusable offline food templates from validated existing diary entries",
+    "scope": "If valid browser receipt arrives prioritize P0-02B. Otherwise derive reusable templates from current temporary diary; no extra store or guesses; explicit editor confirmation.",
     "acceptance": [
-      "Round-trip retains records, IDs, revisions, statuses, source metadata and targets",
-      "Invalid import leaves existing state unchanged",
-      "Explicit confirmation before replace",
-      "No automatic transmission or persistence",
-      "Targeted regression and mock DOM evidence distinct from browser acceptance"
+      "Preserve source/basis/preparation, not portion or status",
+      "No implicit write",
+      "Unknown values and distinct variants preserved",
+      "Targeted regression and mock DOM evidence"
     ],
-    "rollback": "Revert scoped engineering commit."
+    "rollback": "Revert scoped commit."
   },
   "gates": {
     "local_workspace_reconciliation": "UNKNOWN; before replacing legacy files",
     "native_ios": "requires Xcode/signing and physical device acceptance",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "PREVIEW_TARGETED_PASS_61; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
+    "runtime_tests": "PREVIEW_TARGETED_PASS_74; PARTIAL_DOM_ONLY; MICROPHONE_NOT_RUN; INDEXEDDB_BROWSER_NOT_RUN_BLOCKED; PWA_E2E_NOT_RUN"
   },
-  "parent_head": "11db23b87bbdb4606e060e3295eb932e202f468d",
+  "parent_head": "aae576f189beb4489b21906a9ce5c44f3d6de7df",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE012.md",
-    "previous": "docs/fit-control/evidence/CYCLE011.md",
-    "test_count": 61,
-    "pass": 61,
+    "path": "docs/fit-control/evidence/CYCLE013.md",
+    "previous": "docs/fit-control/evidence/CYCLE012.md",
+    "test_count": 74,
+    "pass": 74,
     "fail": 0,
-    "scope": "54 prior targeted tests + 7 transcript tests; first script minimal DOM smoke includes transcript transfer and explicit confirmation; no real browser or microphone",
+    "scope": "61 prior targeted + 13 backup tests; first-script minimal DOM smoke; no real browser, file dialog or download",
     "tested_blobs": {
       "preview/build.py": "f1ac01e6b0828266b03a433b1a8904c286accf86",
       "preview/daily-report.mjs": "ba816538be242ad46a5bb7732a81e6c9bc63d56f",
-      "preview/diary-preview.mjs": "9bde62ee9b8674f68c5f8a8515ac4f6b22e99a77",
-      "preview/index.html": "95a7f450da99ca4f9f0de34a24e1c3b8526ceb32",
+      "preview/diary-preview.mjs": "a68fb42e9764dabb7024467c8674f53b739f689e",
+      "preview/index.html": "bce2cdbcf2eb817bb5917f4aa3383e8ee56c807d",
       "tests/daily-report.test.mjs": "66b5e5f0c6dc994f12b3971133a33422e0dba855",
       "tests/diary-preview.test.mjs": "b765e619f6c782784bcc2a0a024eacf55b9beb0c",
-      "tests/dom-smoke.mjs": "edc17c88ef628edd88bcd080739c29892faf68ec",
+      "tests/dom-smoke.mjs": "4b32957ca64406ecc5f7310cf682bd6d30cb4874",
       "tests/preview-goals.test.mjs": "e17fa3b67a0e4344abd161b4a638b8994a7511a1",
       "preview/voice.mjs": "d4cb6a0b9bef0dad373804bcc831599c2ff9fd80",
       "tests/voice.test.mjs": "0042dfeab4f105ed2f7adb058fb4bd82a308e777",
       "preview/transcript.mjs": "86e9205db6c73bd3cf9d56bcc3d286c5855c9cf3",
-      "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490"
+      "tests/transcript.test.mjs": "88d2247e5d26f1a53c4425aa51e8166b37133490",
+      "tests/backup.test.mjs": "de22b5a09ff9a56aa128c7a5f4597fa71675707a"
     },
-    "html_sha256": "d4f032dfb81f2b1e63686ca79f3a3e4b87f0cb713ce3cecc4aae476f0daa6872",
+    "html_sha256": "710c58b0027fcb27757a400fbd8889b260814b4113631d8ba37aa1679465f1a1",
+    "html_bytes": 231429,
     "browser": {
       "status": "NOT_RUN_BLOCKED",
       "planned_cases": 14,
