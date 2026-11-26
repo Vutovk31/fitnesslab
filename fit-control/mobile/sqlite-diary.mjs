@@ -34,17 +34,27 @@ async function verifySchema(tx,version){
   check(objects.length===expected.length&&expected.every((e,i)=>Object.keys(e).every(k=>objects[i][k]===e[k])),'Unexpected schema objects');
 }
 function assertChange(result) { if(result?.changes!==1) throw new DiaryConflict('Unexpected write count'); }
+function backupGoals(value){
+  check(value && typeof value==='object' && !Array.isArray(value) && Object.keys(value).length===2 && Object.hasOwn(value,'revision') && Object.hasOwn(value,'targets'),'Invalid backup goals');
+  check(Number.isSafeInteger(value.revision)&&value.revision>=0,'Invalid backup goal revision');
+  validateGoals(value.targets);
+  check(value.revision!==0||GOAL_KEYS.every(k=>value.targets[k]===null),'Invalid unset goals');
+  return value;
+}
 function backupRows(text) {
   check(typeof text==='string' && text.length<=MAX_BYTES && new TextEncoder().encode(text).length<=MAX_BYTES,'Backup too large or invalid');
   const b=JSON.parse(text);
-  check(b && typeof b==='object' && Object.keys(b).sort().join(',')==='entries,product,schema_version' && b.product==='FIT CONTROL' && b.schema_version===1 && Array.isArray(b.entries) && b.entries.length<=MAX_ROWS,'Unsupported backup');
+  check(b && typeof b==='object' && !Array.isArray(b) && b.product==='FIT CONTROL' && [1,2].includes(b.schema_version) && Array.isArray(b.entries) && b.entries.length<=MAX_ROWS,'Unsupported backup');
+  const keys=b.schema_version===1?['product','schema_version','entries']:['product','schema_version','entries','goals'];
+  check(Object.keys(b).length===keys.length&&keys.every(k=>Object.hasOwn(b,k)),'Unsupported backup fields');
+  const goals=b.schema_version===2?backupGoals(b.goals):readGoals(undefined);
   const ids=new Set(), days=new Map();
   for(const e of b.entries){
     validateEntry(e);check(e.status!=='deleted'||e.revision>=2,'Invalid tombstone');check(!ids.has(e.id),'Duplicate backup id');ids.add(e.id);
     if(!days.has(e.local_date))days.set(e.local_date,[]);days.get(e.local_date).push(e);
   }
   for(const [date,rows] of days)dayBalance(rows,date,null);
-  return b.entries;
+  return {entries:b.entries,goals};
 }
 const INSERT='INSERT INTO fc_entries(id,revision,local_date,payload) VALUES(?,?,?,?)';
 async function insert(tx,e){assertChange(await tx.run(INSERT,[e.id,e.revision,e.local_date,JSON.stringify(e)]));}
@@ -100,14 +110,19 @@ export class SQLiteDiary {
     const stat=await tx.get('SELECT count(*) AS n, coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_entries',[]);
     check(stat.n<=MAX_ROWS && stat.bytes<=MAX_BYTES,'Backup too large');
     const entries=(await tx.all(SELECT+' ORDER BY id',[])).map(decode);
-    const text=JSON.stringify({product:'FIT CONTROL',schema_version:1,entries});backupRows(text);return text;
+    const goalSize=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
+    check(stat.bytes+goalSize.bytes<=MAX_BYTES,'Backup too large');
+    const goals=readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
+    const text=JSON.stringify({product:'FIT CONTROL',schema_version:2,entries,goals});backupRows(text);return text;
   });}
   async restoreBackup(text,approved=false){
-    check(approved===true,'Explicit approval required');const entries=backupRows(text);
+    check(approved===true,'Explicit approval required');const {entries,goals}=backupRows(text);
     return this.#tx(async tx=>{
       const {n}=await tx.get('SELECT count(*) AS n FROM fc_entries',[]);
-      if(n!==0)throw new DiaryConflict('Restore requires empty database');
+      const prefs=await tx.get('SELECT count(*) AS n FROM fc_goals',[]);
+      if(n!==0||prefs.n!==0)throw new DiaryConflict('Restore requires empty database');
       for(const e of entries)await insert(tx,e);
+      if(goals.revision>0)assertChange(await tx.run('INSERT INTO fc_goals(id,revision,payload) VALUES(1,?,?)',[goals.revision,JSON.stringify(goals.targets)]));
       return {restored:entries.length};
     });
   }
