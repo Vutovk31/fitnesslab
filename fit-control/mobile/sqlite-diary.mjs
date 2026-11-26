@@ -10,6 +10,10 @@ const INDEX = 'CREATE INDEX fc_entries_date ON fc_entries(local_date)';
 const GOALS = 'CREATE TABLE fc_goals (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991), payload TEXT NOT NULL)';
 const GOAL_KEYS=['carbs_g','fat_g','kcal','protein_g'];
 const MAX_ROWS=1000, MAX_BYTES=2*1024*1024;
+// v3 is a bounded larger JSON snapshot, not a streaming file format.
+const LARGE_ROWS=20000, LARGE_BYTES=16*1024*1024, ROW_BYTES=64*1024, PAGE=64;
+const utf8=new TextEncoder();
+const bytes=text=>utf8.encode(text).length;
 const SELECT = 'SELECT id,revision,local_date,payload FROM fc_entries';
 function check(ok, message) { if (!ok) throw new RangeError(message); }
 function decode(row) {
@@ -42,14 +46,17 @@ function backupGoals(value){
   return value;
 }
 function backupRows(text) {
-  check(typeof text==='string' && text.length<=MAX_BYTES && new TextEncoder().encode(text).length<=MAX_BYTES,'Backup too large or invalid');
+  check(typeof text==='string' && text.length<=LARGE_BYTES && bytes(text)<=LARGE_BYTES,'Backup too large or invalid');
   const b=JSON.parse(text);
-  check(b && typeof b==='object' && !Array.isArray(b) && b.product==='FIT CONTROL' && [1,2].includes(b.schema_version) && Array.isArray(b.entries) && b.entries.length<=MAX_ROWS,'Unsupported backup');
+  check(b && typeof b==='object' && !Array.isArray(b) && b.product==='FIT CONTROL' && [1,2,3].includes(b.schema_version) && Array.isArray(b.entries),'Unsupported backup');
+  const large=b.schema_version===3;
+  check(b.entries.length<=(large?LARGE_ROWS:MAX_ROWS) && (large||bytes(text)<=MAX_BYTES),'Backup too large');
   const keys=b.schema_version===1?['product','schema_version','entries']:['product','schema_version','entries','goals'];
   check(Object.keys(b).length===keys.length&&keys.every(k=>Object.hasOwn(b,k)),'Unsupported backup fields');
-  const goals=b.schema_version===2?backupGoals(b.goals):readGoals(undefined);
+  const goals=b.schema_version===1?readGoals(undefined):backupGoals(b.goals);
   const ids=new Set(), days=new Map();
   for(const e of b.entries){
+    if(large)check(bytes(JSON.stringify(e))<=ROW_BYTES,'Backup row too large');
     validateEntry(e);check(e.status!=='deleted'||e.revision>=2,'Invalid tombstone');check(!ids.has(e.id),'Duplicate backup id');ids.add(e.id);
     if(!days.has(e.local_date))days.set(e.local_date,[]);days.get(e.local_date).push(e);
   }
@@ -106,15 +113,35 @@ export class SQLiteDiary {
     return {...old,revision:old.revision+1,status:'deleted',updated_at:updatedAt};
   });}
   async list(date){dayBalance([],date,null);return this.#tx(async tx=>(await tx.all(SELECT+' WHERE local_date=? ORDER BY id',[date])).map(decode));}
-  async exportBackup(){return this.#tx(async tx=>{
-    const stat=await tx.get('SELECT count(*) AS n, coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_entries',[]);
-    check(stat.n<=MAX_ROWS && stat.bytes<=MAX_BYTES,'Backup too large');
-    const entries=(await tx.all(SELECT+' ORDER BY id',[])).map(decode);
-    const goalSize=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
-    check(stat.bytes+goalSize.bytes<=MAX_BYTES,'Backup too large');
-    const goals=readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
-    const text=JSON.stringify({product:'FIT CONTROL',schema_version:2,entries,goals});backupRows(text);return text;
-  });}
+  async exportBackup(version=2){
+    check(version===2||version===3,'Unsupported export version');
+    return this.#tx(async tx=>{
+      const large=version===3,limit=large?LARGE_BYTES:MAX_BYTES;
+      const stat=await tx.get('SELECT count(*) AS n, coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes, coalesce(max(length(CAST(payload AS BLOB))),0) AS largest FROM fc_entries',[]);
+      const goalSize=await tx.get('SELECT coalesce(sum(length(CAST(payload AS BLOB))),0) AS bytes FROM fc_goals',[]);
+      check(stat.n<=(large?LARGE_ROWS:MAX_ROWS) && stat.bytes+goalSize.bytes<=limit,'Backup too large');
+      if(large)check(stat.largest<=ROW_BYTES,'Backup row too large');
+      const goals=readGoals(await tx.get('SELECT id,revision,payload FROM fc_goals WHERE id=1',[]));
+      if(!large){
+        const entries=(await tx.all(SELECT+' ORDER BY id',[])).map(decode);
+        const text=JSON.stringify({product:'FIT CONTROL',schema_version:2,entries,goals});backupRows(text);return text;
+      }
+      const parts=['{"product":"FIT CONTROL","schema_version":3,"entries":['];
+      const suffix='],"goals":'+JSON.stringify(goals)+'}';
+      let used=bytes(parts[0])+bytes(suffix),cursor='',count=0;
+      while(count<stat.n){
+        const rows=await tx.all(SELECT+' WHERE id>? ORDER BY id LIMIT ?',[cursor,PAGE]);
+        check(rows.length>0&&rows.length<=PAGE,'Incomplete backup page');
+        for(const row of rows){
+          const e=decode(row);check(e.id>cursor,'Invalid backup order');cursor=e.id;
+          const part=(count?',':'')+JSON.stringify(e);
+          check(bytes(JSON.stringify(e))<=ROW_BYTES,'Backup row too large');
+          used+=bytes(part);check(used<=limit,'Backup too large');parts.push(part);count++;
+          check(count<=stat.n,'Backup count mismatch');
+        }
+      }
+      parts.push(suffix);const text=parts.join('');backupRows(text);return text;
+    });}
   async restoreBackup(text,approved=false){
     check(approved===true,'Explicit approval required');const {entries,goals}=backupRows(text);
     return this.#tx(async tx=>{
