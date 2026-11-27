@@ -1,0 +1,78 @@
+name: FIT CONTROL pinned regression (one-shot)
+
+on:
+  push:
+    branches: [engineering/fit-control-mvp]
+    paths: [.github/workflows/fit-control-regression-once.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    if: github.repository == 'Vutovk31/fitnesslab' && github.ref == 'refs/heads/engineering/fit-control-mvp' && github.event.repository.private == false && github.event.before == '33d530167f3a910d2c73e14eebd1d8eddd9d85d3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact event revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Node 22.16.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Verify pinned source inventory and execute complete core regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git hash-object docs/fit-control/handoff/verify_source_archive.py)" = c213389f375c06d15a91011d0c33e80b4f27774a
+          test "$(git hash-object docs/fit-control/handoff/source-manifest.tsv)" = 669f7f4b4fe1ccd822d6b8f33e0f213a447e1e71
+          git archive --format=zip --output="$RUNNER_TEMP/fit-control-source.zip" "$GITHUB_SHA" fit-control
+          python3 -I docs/fit-control/handoff/verify_source_archive.py "$RUNNER_TEMP/fit-control-source.zip"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root = Path('fit-control')
+          expected = dict((p, h) for h, p in (line.split('\t') for line in Path('docs/fit-control/handoff/source-manifest.tsv').read_text().splitlines()))
+          actual = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() or p.is_symlink()}
+          assert actual == set(expected), 'Unexpected checkout inventory'
+          for name, oid in expected.items():
+              p = root / name
+              assert p.is_file() and not p.is_symlink() and not any(a.is_symlink() for a in p.parents)
+              data = p.read_bytes()
+              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == oid, name
+          assert len(list((root/'tests').glob('*.test.mjs'))) == 33
+          print('PASS: checkout 99/99 exact blobs; 33 top-level Node test files')
+          PY
+          test "$(node --version)" = v22.16.0
+          test "$(npm --version)" = 10.9.2
+          curl --fail --silent --show-error --location --proto '=https' --max-time 120 --output "$RUNNER_TEMP/typescript.tgz" https://registry.npmjs.org/typescript/-/typescript-5.8.3.tgz
+          python3 - "$RUNNER_TEMP/typescript.tgz" <<'PY'
+          import base64, hashlib, pathlib, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          expected = 'p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ=='
+          assert base64.b64encode(hashlib.sha512(data).digest()).decode() == expected, 'TypeScript tarball integrity mismatch'
+          PY
+          mkdir "$RUNNER_TEMP/fit-control-compiler"
+          tar -xzf "$RUNNER_TEMP/typescript.tgz" -C "$RUNNER_TEMP/fit-control-compiler"
+          export PATH="$RUNNER_TEMP/fit-control-compiler/package/bin:$PATH"
+          test "$(tsc --version)" = 'Version 5.8.3'
+          cd fit-control
+          npm ci --offline --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          npm test | tee "$RUNNER_TEMP/fit-control-tests.log"
+          python3 - "$RUNNER_TEMP/fit-control-tests.log" <<'PY'
+          import pathlib, re, sys
+          log = pathlib.Path(sys.argv[1]).read_text()
+          counts = {k: int(v) for k,v in re.findall(r'^# (tests|pass|fail|cancelled|skipped|todo) (\d+)\s*$', log, re.M)}
+          assert set(counts) == {'tests','pass','fail','cancelled','skipped','todo'}, counts
+          assert counts['tests'] >= 114 and counts['tests'] == counts['pass'] and all(counts[k] == 0 for k in ('fail','cancelled','skipped','todo')), counts
+          print('Core Node regression receipt:', counts)
+          PY
+          sha256sum dist/*.js
+          printf 'REGRESSION_PASS source=%s; native/device/browser NOT_RUN\n' "$GITHUB_SHA"
