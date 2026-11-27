@@ -43,14 +43,15 @@
   ],
   "next_action": {
     "id": "M07D",
-    "title": "Restore reproducible workspace and integrate synthetic widget path",
-    "scope": "Restore pinned engineering source/test workspace with verified hashes, compile TypeScript and run canonical snapshot/publication/consumer integration and available full regression. If direct Git unavailable use connector text retrieval or existing local Codex handoff, no unbounded retries or fabricated test counts. Include hidden/revocation/stale/invalid link cases; no native/real-data publication, SDK install retry, deployment, main/backup or automation changes. Prioritize mobile build handoff after this integration.",
+    "title": "Restore reproducible workspace and close integration regression before native build",
+    "scope": "Restore exact live HEAD build/test source via authorized clone or hash-verified connector reconstruction; verify inventory and blobs; fresh tsc/typecheck, npm test and canonical synthetic widget snapshot/publication/consumer integration, add bounded tests if needed. Record exact source SHA, commands, results and handoff. Stop on dependency blocker, do not repeat DNS/SDK attempts without changed conditions. Freeze optional optimization and feature expansion; next M04B synthetic APK build handoff, iOS remains target. No real data, main/backup/automation changes, paid runner or deployment.",
     "acceptance": [
-      "Pinned workspace and actual build/test evidence or explicit unresolved blocker",
-      "Canonical widget reader/publication/consumer integration verified on synthetic data or marked NOT_RUN",
-      "Existing native build/privacy/OS cache gates remain closed"
+      "Complete verified build/test workspace or explicit bounded recovery blocker",
+      "Fresh typecheck/compile and actual regression with exact hashes, canonical reader/publication/consumer integration including privacy/stale/revoke/invalid route, or NOT_RUN with evidence",
+      "Existing native privacy/build/device gates remain closed; no fake release acceptance"
     ],
-    "rollback": "Scoped source revert; preserve database v4 and user data."
+    "rollback": "Scoped source/documentation revert, preserve DB v4 and canonical data; no downgrade.",
+    "priority": "P0"
   },
   "gates": {
     "local_workspace_reconciliation": "BLOCKED_DEPENDENCY: previous /mnt/data worktree absent, direct Git DNS failed; connector reads available; restore pinned workspace before regression",
@@ -154,5 +155,27 @@
     "microphone": "NOT_RUN",
     "widgets": "NOT_RUN_NATIVE",
     "ci": "NOT_RUN"
+  },
+  "management_review": {
+    "date": "2026-11-27",
+    "source_head": "d1e1a3b70564578de2dc0a83b36ff5374ea7693c",
+    "path": "docs/fit-control/AUDIT_2026-11-27.md",
+    "status": "PARTIAL_ACCEPTANCE_RELEASE_BLOCKED",
+    "files": 97,
+    "verified_recorded_blobs": 50,
+    "actual_fresh_tests": {
+      "pass": 7,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 95.98961,
+      "scope": "exact C056 consumer/router unit tests, mock reader"
+    },
+    "historical_regression": {
+      "pass": 213,
+      "status": "NOT_RERUN"
+    },
+    "native_acceptance": "NOT_RUN 0/14 verified each platform",
+    "visibility": "PUBLIC",
+    "priority": "P0 reproducibility and installable synthetic mobile MVP"
   }
 }
