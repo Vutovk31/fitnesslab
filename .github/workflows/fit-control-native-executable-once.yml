@@ -1,0 +1,64 @@
+name: FIT CONTROL native executable acceptance C066
+on:
+  push:
+    branches: [engineering/fit-control-mvp]
+    paths: [.github/workflows/fit-control-native-executable-once.yml]
+permissions:
+  contents: read
+jobs:
+  accept:
+    if: github.repository == 'Vutovk31/fitnesslab' && github.ref == 'refs/heads/engineering/fit-control-mvp' && github.event.repository.private == false && github.event.before == 'e6e4967004960313035a38eae87fc8bff9ffcf81'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: e6e4967004960313035a38eae87fc8bff9ffcf81
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Verify JDK and locked executable without lifecycle scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'e6e4967004960313035a38eae87fc8bff9ffcf81'
+          test "$(git hash-object fit-control/mobile/package.json)" = 71635f30339a0f439711ffe2f7e53b7332c8bdea
+          echo '7f2abd99210915f487ee70f6b646fae4899cb8843caffea1d99cd3e0d88adfc5  docs/fit-control/handoff/mobile-package-lock.candidate.json' | sha256sum -c -
+          test "$(node --version)" = v22.16.0
+          test "$(npm --version)" = 10.9.2
+          test -n "${JAVA_HOME_21_X64:-}"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          javac -version | grep -E '^javac 21([.]|$)'
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          mkdir "$RUNNER_TEMP/native-accept"
+          cp fit-control/mobile/package.json "$RUNNER_TEMP/native-accept/"
+          cp docs/fit-control/handoff/mobile-package-lock.candidate.json "$RUNNER_TEMP/native-accept/package-lock.json"
+          cd "$RUNNER_TEMP/native-accept"
+          npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/ --strict-ssl=true
+          echo '7f2abd99210915f487ee70f6b646fae4899cb8843caffea1d99cd3e0d88adfc5  package-lock.json' | sha256sum -c -
+          test "$(node_modules/@esbuild/linux-x64/bin/esbuild --version)" = 0.28.2
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {build,version} from 'esbuild';
+          assert.equal(version,'0.28.2');
+          const r=await build({stdin:{contents:'export const probe = 42;'},bundle:true,format:'esm',write:false});
+          assert.equal(r.outputFiles.length,1);
+          assert.match(r.outputFiles[0].text,/42/);
+          console.log('ESBUILD_API_PASS');
+          JS
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          for(const [name,p] of Object.entries(lock.packages)){
+            if(!name||!fs.existsSync(name+'/package.json')) continue;
+            const m=JSON.parse(fs.readFileSync(name+'/package.json','utf8'));
+            if(m.version!==p.version) throw Error('version mismatch '+name);
+            const files=fs.readdirSync(name).filter(x=>/^(licen[cs]e|copying|notice)([.]|$)/i.test(x));
+            console.log(JSON.stringify({name,version:m.version,license:m.license,licenseFiles:files,scripts:Object.keys(m.scripts||{}).filter(x=>['preinstall','install','postinstall'].includes(x))}));
+          }
+          JS
+          echo 'EXECUTABLE_PREFLIGHT_PASS; native build not run'
