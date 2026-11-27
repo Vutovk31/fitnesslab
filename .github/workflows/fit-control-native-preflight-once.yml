@@ -1,0 +1,67 @@
+name: FIT CONTROL native preflight (one-shot C061)
+on:
+  push:
+    branches: [engineering/fit-control-mvp]
+    paths: [.github/workflows/fit-control-native-preflight-once.yml]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: github.repository == 'Vutovk31/fitnesslab' && github.ref == 'refs/heads/engineering/fit-control-mvp' && github.event.repository.private == false && github.event.before == '861a0de075361b3ffc98cc7487a133dae2bf2736'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 861a0de075361b3ffc98cc7487a133dae2bf2736
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Exact source and toolchain receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '861a0de075361b3ffc98cc7487a133dae2bf2736'
+          test "$(git hash-object fit-control/mobile/package.json)" = 71635f30339a0f439711ffe2f7e53b7332c8bdea
+          node --version
+          npm --version
+          java -version
+          javac -version
+          gradle --version
+          test -d "$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+      - name: Resolve candidate without lifecycle scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/native-lock"
+          cp fit-control/mobile/package.json "$RUNNER_TEMP/native-lock/"
+          cd "$RUNNER_TEMP/native-lock"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/ --strict-ssl=true
+          sha256sum package-lock.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          const entries=Object.entries(lock.packages);
+          if(lock.lockfileVersion!==3 || entries.length<8) throw Error('unexpected lock');
+          for(const [name,p] of entries){
+            if(!name) continue;
+            const u=new URL(p.resolved);
+            if(u.origin!=='https://registry.npmjs.org'||u.username||u.password||!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(p.integrity||'')||p.link) throw Error('untrusted entry '+name);
+            console.log(JSON.stringify({name,version:p.version,license:p.license,install:p.hasInstallScript||false,engines:p.engines,peerDependencies:p.peerDependencies,os:p.os,cpu:p.cpu}));
+          }
+          console.log('LOCK_ENTRIES='+entries.length);
+          JS
+          echo LOCK_BASE64_BEGIN
+          base64 -w 76 package-lock.json
+          echo LOCK_BASE64_END
+          set +e
+          npm audit --package-lock-only --ignore-scripts --json --registry=https://registry.npmjs.org/ > audit.json
+          audit_status=$?
+          set -e
+          echo "AUDIT_EXIT=$audit_status"
+          cat audit.json
+          test ! -d node_modules
+          echo 'CANDIDATE_ONLY: review required; no install or native build'
