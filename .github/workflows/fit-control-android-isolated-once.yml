@@ -1,0 +1,107 @@
+name: FIT CONTROL isolated Android recovery C071
+on:
+  push:
+    branches: [engineering/fit-control-mvp]
+    paths: [.github/workflows/fit-control-android-isolated-once.yml]
+permissions:
+  contents: read
+jobs:
+  android:
+    if: github.repository == 'Vutovk31/fitnesslab' && github.ref == 'refs/heads/engineering/fit-control-mvp' && github.event.repository.private == false && github.event.before == '94279362ba405b7f86e5dca6146034418280f6ce'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      FIT_CONTROL_SYNTHETIC_BUILD: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 94279362ba405b7f86e5dca6146034418280f6ce
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Isolated exact source and accepted lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '94279362ba405b7f86e5dca6146034418280f6ce'
+          test "$(git hash-object docs/fit-control/handoff/source-manifest.tsv)" = 669f7f4b4fe1ccd822d6b8f33e0f213a447e1e71
+          count=0
+          while IFS=$'\t' read -r sha path; do
+            test "$(git hash-object "fit-control/$path")" = "$sha"
+            count=$((count+1))
+          done < docs/fit-control/handoff/source-manifest.tsv
+          test "$count" = 99
+          echo '7f2abd99210915f487ee70f6b646fae4899cb8843caffea1d99cd3e0d88adfc5  fit-control/mobile/package-lock.json' | sha256sum -c -
+          tmp="$(mktemp -d "$RUNNER_TEMP/fit-control-build.XXXXXX")"
+          cp -a fit-control "$tmp/fit-control"
+          cp docs/fit-control/handoff/verify_android_apk.py "$tmp/"
+          echo "FC_ROOT=$tmp" >> "$GITHUB_ENV"
+          python3 - "$tmp" <<'PY'
+          import pathlib, sys, json
+          root=pathlib.Path(sys.argv[1]).resolve()
+          for parent in [root,*root.parents]:
+              for name in ['package.json','tsconfig.json']:
+                  path=parent/name
+                  if path.exists():
+                      json.loads(path.read_text())
+          print('ISOLATED_ANCESTORS_PASS')
+          PY
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          "$JAVA_HOME_21_X64/bin/javac" -version | grep -E '^javac 21([.]|$)'
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          cd "$tmp/fit-control/mobile"
+          npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/ --strict-ssl=true
+          echo '7f2abd99210915f487ee70f6b646fae4899cb8843caffea1d99cd3e0d88adfc5  package-lock.json' | sha256sum -c -
+      - name: Resume synthetic web and exact metafile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FC_ROOT/fit-control/mobile"
+          test "$FIT_CONTROL_SYNTHETIC_BUILD" = 1
+          npm run build:web
+          node --input-type=module <<'JS'
+          import {build} from 'esbuild';
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const r=await build({entryPoints:['./native-entry.mjs'],bundle:true,define:{__FIT_CONTROL_PRIVACY_MODE__:JSON.stringify('synthetic')},platform:'browser',format:'esm',target:'es2022',write:false,legalComments:'inline',outfile:'app.js',metafile:true});
+          assert.equal(r.outputFiles.length,1);
+          assert.deepEqual(Buffer.from(r.outputFiles[0].contents),readFileSync('www/app.js'));
+          console.log('ESBUILD_METAFILE='+JSON.stringify(r.metafile));
+          JS
+          sha256sum www/index.html www/app.js
+      - name: Android generation and runtime graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FC_ROOT/fit-control/mobile"
+          test ! -e android
+          node_modules/.bin/cap add android
+          node_modules/.bin/cap sync android
+          cd android
+          cat gradle/wrapper/gradle-wrapper.properties
+          ./gradlew --no-daemon --version
+          ./gradlew --no-daemon :app:dependencies --configuration debugRuntimeClasspath | tee "$RUNNER_TEMP/runtime-classpath.txt"
+          if grep -E ' FAILED|Could not resolve' "$RUNNER_TEMP/runtime-classpath.txt"; then exit 1; fi
+          echo 'NATIVE_GRAPH_CAPTURED'
+          ./gradlew --no-daemon :app:assembleDebug
+      - name: ARTIFACT gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FC_ROOT"
+          apk=fit-control/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          python3 verify_android_apk.py "$apk" fit-control/mobile/www
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$tools/apksigner" verify --verbose --print-certs "$apk"
+          "$tools/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='com.vutovka.fitcontrol'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -F 'application-debuggable' "$RUNNER_TEMP/apk-badging.txt"
+          "$tools/aapt" dump permissions "$apk"
+          sha256sum "$apk"
+          stat --format='APK_BYTES=%s' "$apk"
+          echo 'APK_VERIFIED_INTERNAL_ONLY; RELEASE_GATE_OPEN; NO_UPLOAD'
