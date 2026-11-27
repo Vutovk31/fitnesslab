@@ -3,8 +3,8 @@
   "product": "FIT CONTROL",
   "repository": "Vutovk31/fitnesslab",
   "branch": "engineering/fit-control-mvp",
-  "cycle": "058-M07D-R-SQLITE-WIDGET-INTEGRATION",
-  "status": "PARTIAL_ACCEPTANCE_SQLITE_WIDGET_INTEGRATION_PASS_FULL_WORKSPACE_OPEN",
+  "cycle": "059-M07D-R2-ARCHIVE-HANDOFF",
+  "status": "PARTIAL_ACCEPTANCE_WAITING_FOR_FULL_SOURCE_ARCHIVE",
   "execution_mode": "MANUAL_ONLY",
   "base_head": "074fa61929e85c50a1c4e65bdbd6d42b64f45733",
   "base_tree": "dabdc8a89025b98d4b867784a778f57150ff0a65",
@@ -42,23 +42,23 @@
     "manual_cycles_only"
   ],
   "next_action": {
-    "id": "M07D-R2",
+    "id": "M07D-R3",
     "priority": "P0",
-    "title": "Complete full source archive handoff and regression",
-    "scope": "Reuse C058 verified subset. Prefer single full tracked-source archive from existing authorized clone or Codex at exact current engineering HEAD; verify every fit-control file against Git tree before compiling. If archive unavailable, bounded connector recovery of remaining files; no repeated direct Git/codeload failures, no feature expansion. Run fresh full npm ci/typecheck/test with actual complete workspace. SQLite-to-widget synthetic integration already tested; retain regression tests. M04B only after acceptance. No personal data, main/backup/automation changes, paid runner or deploy.",
+    "title": "Verify full pinned source archive and run complete regression",
+    "scope": "WAITING_FOR_SOURCE_ARCHIVE: receive FIT_CONTROL_SOURCE.zip generated from existing authorized clone/Codex with git archive --format=zip --output=FIT_CONTROL_SOURCE.zip 72f2eb710098347dbb36461fd63e03def7fbfa90 fit-control. Verify against docs/fit-control/handoff/source-manifest.tsv using tested verifier, reconcile live fit-control tree, then extract only exact verified files into disposable workspace, run core npm ci offline/typecheck/test and record actual full regression. No repeated unchanged DNS/SDK failures or more serial partial recovery absent changed dependency. M04B only after full M07D acceptance; preserve all native/real-data gates, main/backup and automations.",
     "acceptance": [
-      "Full verified source inventory and dependency evidence, no missing files",
-      "Fresh full core regression and existing SQLite/widget integration PASS or explicit documented failure",
-      "M04B synthetic native build separately gated, no real data"
+      "99/99 pinned source blobs verified, complete archive supplied",
+      "Fresh complete available regression including SQLite/widget integration executed and documented",
+      "Separate native dependency/privacy/build/device gate, no release claim"
     ],
-    "rollback": "Scoped test/documentation revert only; preserve v4 DB."
+    "rollback": "Scoped docs/test revert; preserve v4 database and canonical data."
   },
   "gates": {
-    "local_workspace_reconciliation": "PARTIAL: 20/98 parent fit-control files restored plus 1 new test; 78 missing parent files; exact missing manifest in C058; prefer full tracked-source archive from authorized clone/Codex",
+    "local_workspace_reconciliation": "BLOCKED_DEPENDENCY: 23/99 current source files exact; 76 absent; pinned full archive handoff and verifier ready; awaiting owner-provided archive or authorized clone access",
     "native_ios": "NOT_RUN; actual Xcode build/signing/device acceptance required",
     "private_repo": "owner decision before changing visibility",
     "production": "NOT_AUTHORIZED",
-    "runtime_tests": "M07D_R_PARTIAL_NODE_PASS_78_74_SUBSET_4_NEW; FRESH_TSC_PASS; REAL_FILE_SQLITE_SYNTHETIC_WIDGET_E2E_PASS; FULL_REGRESSION_NOT_RUN_NATIVE_NOT_RUN",
+    "runtime_tests": "M07D_R2_PARTIAL_NODE_PASS_114_78_INHERITED_36_RESTORED; ARCHIVE_VERIFIER_PYTHON_PASS_8; FULL_REGRESSION_NOT_RUN_NATIVE_NOT_RUN",
     "legacy_indexeddb": "NOT_RUN_BLOCKED; required if PWA shipped; not prerequisite for mobile development under owner decision",
     "native_android": "NOT_RUN; actual build/device acceptance required",
     "backup_release": "OPEN: encrypted-only UI orchestration local PASS, native file/passphrase ports absent/disabled, full bounds/heap/KDF/device performance and streaming pending",
@@ -70,14 +70,14 @@
     "catalog_migration": "OPEN_RELEASE_BLOCKER: oversized legacy migration and damaged projection plus unresolved journal require non-destructive recovery; bounded v3 day inspection and idle-journal v4 repair local PASS, no native recovery UI",
     "widgets": "LOCAL_PARTIAL: canonical synthetic integration now tested with real file SQLite and journal 4/4; native driver/transport/consent/cache/UI/device pending; no real data"
   },
-  "parent_head": "1eef7d02d13317b371d16f53d5446b338c82e208",
+  "parent_head": "72f2eb710098347dbb36461fd63e03def7fbfa90",
   "evidence": {
-    "path": "docs/fit-control/evidence/CYCLE058.md",
-    "previous": "docs/fit-control/evidence/CYCLE057.md",
-    "test_count": 78,
-    "pass": 78,
+    "path": "docs/fit-control/evidence/CYCLE059.md",
+    "previous": "docs/fit-control/evidence/CYCLE058.md",
+    "test_count": 114,
+    "pass": 114,
     "fail": 0,
-    "scope": "Node 22.16.0 74 prior subset +4 actual file SQLite synthetic widget integration, fresh tsc; full regression NOT_RUN",
+    "scope": "Fresh core compile and subset tests; 78 inherited subset +36 restored original tests, not full regression",
     "historical_regression": {
       "cycle": "055",
       "pass": 213,
@@ -156,14 +156,17 @@
       "mobile/nutrition-matcher.mjs": "646c682208b7f12989028713409af15f909b3c8c",
       "mobile/recovery-store.mjs": "b11e63c78ee2d0a0f300ec6ca4e180572ccac2f7",
       "mobile/sqlite-diary.mjs": "44ff26663c8d8114e2a9779d64d5998a4f48369b",
-      "tests/widget-sqlite-integration.test.mjs": "b4921776eb211fa3ffcf0401c0328c9a7ca22906"
+      "tests/widget-sqlite-integration.test.mjs": "b4921776eb211fa3ffcf0401c0328c9a7ca22906",
+      "tests/diary-editor.test.mjs": "a78687a01d1f8289e700755ba98a274662f1994d",
+      "tests/diary-view.test.mjs": "5ee2947325f02fc93d394e89881aaf98574bbdd4"
     },
     "workspace": {
-      "parent_files": 98,
-      "restored_original": 20,
-      "missing_original": 78,
-      "new_test_files": 1,
-      "archive_sha256": "4a1dc021f6df002df23cc919faf872e13c4cc42e5e8cae297462aa5ec87ba799"
+      "source_head": "72f2eb710098347dbb36461fd63e03def7fbfa90",
+      "parent_files": 99,
+      "verified_original": 23,
+      "missing_original": 76,
+      "handoff_archive_sha256": "466515e3955a42439eb722e0f5b8faf68aa376eece547bff6e677d15f5b69257",
+      "archive_gate": "BLOCKED_INCOMPLETE"
     },
     "browser": {
       "status": "NOT_RUN_BLOCKED",
@@ -182,7 +185,17 @@
     },
     "microphone": "NOT_RUN",
     "widgets": "NOT_RUN_NATIVE",
-    "ci": "NOT_RUN"
+    "ci": "NOT_RUN",
+    "archive_verifier": {
+      "pass": 8,
+      "fail": 0,
+      "scope": "Python unit tests; actual partial archive rejected exit 2; full archive not supplied",
+      "tested_blobs": {
+        "docs/fit-control/handoff/source-manifest.tsv": "669f7f4b4fe1ccd822d6b8f33e0f213a447e1e71",
+        "docs/fit-control/handoff/verify_source_archive.py": "c213389f375c06d15a91011d0c33e80b4f27774a",
+        "docs/fit-control/handoff/test_verify_source_archive.py": "52f5f75296666d4a5ee4dcfda7cd4a55866a8f1a"
+      }
+    }
   },
   "management_review": {
     "date": "2026-11-27",
